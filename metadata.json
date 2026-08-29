@@ -1,0 +1,6 @@
+{
+  "name": "Linux Homepage & Service Launcher",
+  "description": "A modern, lightweight, and Docker-friendly self-hosted homepage and dashboard for Linux applications, network services, and resources.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
