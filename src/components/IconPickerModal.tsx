@@ -8,32 +8,35 @@ interface IconPickerModalProps {
   currentIcon: string;
   onSelectIcon: (icon: string) => void;
   onClose: () => void;
+  initialTab?: 'builtin' | 'upload';
 }
 
 export const IconPickerModal: React.FC<IconPickerModalProps> = ({
   currentIcon,
   onSelectIcon,
-  onClose
+  onClose,
+  initialTab = 'builtin'
 }) => {
-  const [activeTab, setActiveTab] = useState<'builtin' | 'upload'>('builtin');
+  const [activeTab, setActiveTab] = useState<'builtin' | 'upload'>(initialTab);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [isUploading, setIsUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
+  const [isDragOver, setIsDragOver] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const categories = [
-    { id: 'all', label: 'All Icons' },
-    { id: 'os', label: 'Linux OS' },
-    { id: 'infra', label: 'Infrastructure' },
-    { id: 'monitoring', label: 'Monitoring' },
-    { id: 'storage', label: 'Storage' },
-    { id: 'media', label: 'Media' },
-    { id: 'network', label: 'Network & Security' },
-    { id: 'dev', label: 'Dev & DB' },
-    { id: 'enterprise', label: 'Enterprise & SaaS' },
-    { id: 'smarthome', label: 'Smart Home' },
-    { id: 'general', label: 'General & Hardware' }
+    { id: 'all', label: 'همه آیکون‌ها' },
+    { id: 'office', label: 'اداری و اسناد' },
+    { id: 'storage', label: 'ذخیره‌سازی و فایل' },
+    { id: 'network', label: 'شبکه و امنیت' },
+    { id: 'infra', label: 'زیرساخت و سرور' },
+    { id: 'monitoring', label: 'مانیتورینگ' },
+    { id: 'os', label: 'سیستم‌عامل' },
+    { id: 'media', label: 'رسانه' },
+    { id: 'dev', label: 'توسعه' },
+    { id: 'smarthome', label: 'خانه هوشمند' },
+    { id: 'general', label: 'عمومی' }
   ];
 
   const filteredIcons = BUILTIN_ICONS.filter((icon) => {
@@ -47,10 +50,8 @@ export const IconPickerModal: React.FC<IconPickerModalProps> = ({
     return matchesCat && matchesSearch;
   });
 
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
+  const processFile = async (file: File) => {
     if (!file) return;
-
     setIsUploading(true);
     setUploadError(null);
 
@@ -61,7 +62,7 @@ export const IconPickerModal: React.FC<IconPickerModalProps> = ({
         onClose();
       }
     } catch (err: any) {
-      setUploadError(err.message || 'Failed to upload icon');
+      setUploadError(err.message || 'خطا در بارگذاری تصویر آیکون');
     } finally {
       setIsUploading(false);
       if (fileInputRef.current) {
@@ -70,11 +71,24 @@ export const IconPickerModal: React.FC<IconPickerModalProps> = ({
     }
   };
 
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) await processFile(file);
+  };
+
+  const handleDrop = async (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragOver(false);
+    const file = e.dataTransfer.files?.[0];
+    if (file) await processFile(file);
+  };
+
   return (
     <div
       id="icon-picker-modal-backdrop"
       className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-sm animate-in fade-in duration-200"
       onClick={onClose}
+      dir="rtl"
     >
       <div
         id="icon-picker-modal-dialog"
@@ -89,17 +103,18 @@ export const IconPickerModal: React.FC<IconPickerModalProps> = ({
             </div>
             <div>
               <h3 className="text-lg font-bold text-slate-900 dark:text-slate-100">
-                Choose Application Icon
+                انتخاب آیکون برنامه
               </h3>
               <p className="text-xs text-slate-500 dark:text-slate-400">
-                Select from {BUILTIN_ICONS.length}+ built-in Linux logos or upload custom icon
+                انتخاب از بین بیش از {BUILTIN_ICONS.length} آیکون لینوکس و هوم‌لب یا بارگذاری تصویر سفارشی
               </p>
             </div>
           </div>
           <button
             id="close-icon-picker"
             onClick={onClose}
-            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+            aria-label="بستن"
           >
             <X className="w-5 h-5" />
           </button>
@@ -110,24 +125,25 @@ export const IconPickerModal: React.FC<IconPickerModalProps> = ({
           <button
             id="tab-builtin-icons"
             onClick={() => setActiveTab('builtin')}
-            className={`px-4 py-2 text-xs font-semibold rounded-t-lg transition-colors border-b-2 ${
+            className={`px-4 py-2 text-xs font-semibold rounded-t-lg transition-colors border-b-2 cursor-pointer ${
               activeTab === 'builtin'
                 ? 'border-blue-600 text-blue-600 dark:text-blue-400 bg-blue-50/50 dark:bg-blue-950/30'
                 : 'border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
             }`}
           >
-            Built-in Icons ({BUILTIN_ICONS.length})
+            آیکون‌های داخلی ({BUILTIN_ICONS.length})
           </button>
           <button
             id="tab-upload-icon"
             onClick={() => setActiveTab('upload')}
-            className={`px-4 py-2 text-xs font-semibold rounded-t-lg transition-colors border-b-2 ${
+            className={`px-4 py-2 text-xs font-semibold rounded-t-lg transition-colors border-b-2 cursor-pointer flex items-center gap-1.5 ${
               activeTab === 'upload'
                 ? 'border-blue-600 text-blue-600 dark:text-blue-400 bg-blue-50/50 dark:bg-blue-950/30'
                 : 'border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
             }`}
           >
-            Upload Custom Icon (PNG/SVG/WebP)
+            <Upload className="w-3.5 h-3.5" />
+            <span>بارگذاری تصویر سفارشی (PNG شفاف / JPG)</span>
           </button>
         </div>
 
@@ -138,14 +154,14 @@ export const IconPickerModal: React.FC<IconPickerModalProps> = ({
               {/* Search Bar & Category Pills */}
               <div className="space-y-2.5">
                 <div className="relative">
-                  <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                  <Search className="absolute right-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                   <input
                     id="icon-search-input"
                     type="text"
-                    placeholder="Search icons (e.g. Proxmox, Docker, Jellyfin, WireGuard, Nextcloud)..."
+                    placeholder="جستجوی آیکون (مثلاً Proxmox، Docker، Jellyfin، WireGuard)..."
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    className="w-full pl-10 pr-4 py-2 rounded-xl text-sm bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full pr-10 pl-4 py-2 rounded-xl text-sm bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 text-right"
                   />
                 </div>
 
@@ -154,7 +170,7 @@ export const IconPickerModal: React.FC<IconPickerModalProps> = ({
                     <button
                       key={cat.id}
                       onClick={() => setSelectedCategory(cat.id)}
-                      className={`px-2.5 py-1 rounded-lg text-xs font-medium whitespace-nowrap transition-colors ${
+                      className={`px-2.5 py-1 rounded-lg text-xs font-medium whitespace-nowrap transition-colors cursor-pointer ${
                         selectedCategory === cat.id
                           ? 'bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900'
                           : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
@@ -188,11 +204,11 @@ export const IconPickerModal: React.FC<IconPickerModalProps> = ({
                       <div className="w-8 h-8 flex items-center justify-center">
                         <AppIcon icon={icon.id} className="w-7 h-7 group-hover:scale-110 transition-transform" />
                       </div>
-                      <span className="mt-1.5 text-[10px] font-medium text-slate-700 dark:text-slate-300 text-center truncate w-full">
+                      <span className="mt-1.5 text-[10px] font-medium text-slate-700 dark:text-slate-300 text-center truncate w-full" dir="ltr">
                         {icon.name}
                       </span>
                       {isSelected && (
-                        <div className="absolute top-1 right-1 p-0.5 rounded-full bg-blue-600 text-white">
+                        <div className="absolute top-1 left-1 p-0.5 rounded-full bg-blue-600 text-white">
                           <Check className="w-2.5 h-2.5" />
                         </div>
                       )}
@@ -203,74 +219,146 @@ export const IconPickerModal: React.FC<IconPickerModalProps> = ({
 
               {filteredIcons.length === 0 && (
                 <div className="py-12 text-center text-slate-400 text-sm">
-                  No built-in icons match "{searchQuery}". Try searching another keyword or upload a custom image.
+                  هیچ آیکونی با عنوان «{searchQuery}» یافت نشد. می‌توانید عبارت دیگری را جستجو کنید یا آیکون دلخواه خود را بارگذاری کنید.
                 </div>
               )}
             </div>
           ) : (
             <div className="space-y-4">
-              <div className="p-6 rounded-2xl border-2 border-dashed border-slate-300 dark:border-slate-700 hover:border-blue-500 dark:hover:border-blue-500 bg-slate-50 dark:bg-slate-950/40 text-center transition-colors">
+              {/* Dropzone */}
+              <div
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  setIsDragOver(true);
+                }}
+                onDragLeave={() => setIsDragOver(false)}
+                onDrop={handleDrop}
+                className={`p-7 rounded-2xl border-2 border-dashed text-center transition-all ${
+                  isDragOver
+                    ? 'border-blue-500 bg-blue-50/50 dark:bg-blue-950/30 scale-[1.01]'
+                    : 'border-slate-300 dark:border-slate-700 hover:border-blue-500 dark:hover:border-blue-500 bg-slate-50 dark:bg-slate-950/40'
+                }`}
+              >
                 <input
                   type="file"
                   ref={fileInputRef}
                   onChange={handleFileUpload}
-                  accept="image/png,image/jpeg,image/webp,image/svg+xml"
+                  accept="image/png,image/jpeg,image/jpg,image/webp,image/svg+xml"
                   className="hidden"
                   id="custom-icon-upload-input"
                 />
                 <div className="flex flex-col items-center gap-3">
-                  <div className="p-3 rounded-full bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400">
-                    <Upload className="w-6 h-6" />
+                  <div className="p-3.5 rounded-2xl bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 shadow-xs">
+                    <Upload className="w-7 h-7" />
                   </div>
                   <div>
                     <h4 className="text-sm font-bold text-slate-900 dark:text-slate-100">
-                      Upload Custom Icon Image
+                      بارگذاری تصویر آیکون (PNG شفاف / JPG)
                     </h4>
-                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 max-w-sm">
-                      PNG with transparent background, SVG (sanitized), WebP or JPG up to 5MB.
+                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-1.5 max-w-md mx-auto leading-relaxed">
+                      فایل عکس را بکشید و اینجا رها کنید، یا دکمه زیر را برای انتخاب فایل کلیک کنید.
                     </p>
                   </div>
+
+                  {/* Format Badges */}
+                  <div className="flex items-center justify-center gap-1.5 flex-wrap pt-1">
+                    <span className="px-2 py-0.5 rounded-md bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 text-[10px] font-semibold">
+                      PNG با زمینه شفاف (بدون کادر)
+                    </span>
+                    <span className="px-2 py-0.5 rounded-md bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 text-[10px] font-semibold">
+                      JPG / JPEG استاندارد
+                    </span>
+                    <span className="px-2 py-0.5 rounded-md bg-sky-100 dark:bg-sky-950/60 text-sky-800 dark:text-sky-300 text-[10px] font-semibold">
+                      WebP سبک
+                    </span>
+                    <span className="px-2 py-0.5 rounded-md bg-purple-100 dark:bg-purple-950/60 text-purple-800 dark:text-purple-300 text-[10px] font-semibold">
+                      SVG وکتور
+                    </span>
+                  </div>
+
                   <button
                     type="button"
                     onClick={() => fileInputRef.current?.click()}
                     disabled={isUploading}
-                    className="mt-2 px-4 py-2 rounded-xl text-xs font-semibold bg-blue-600 hover:bg-blue-700 text-white transition-colors cursor-pointer shadow-sm disabled:opacity-50"
+                    className="mt-2 px-5 py-2.5 rounded-xl text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white transition-all cursor-pointer shadow-sm hover:shadow disabled:opacity-50 flex items-center gap-2"
                   >
-                    {isUploading ? 'Uploading & Sanitizing...' : 'Select File from Computer'}
+                    <Upload className="w-4 h-4" />
+                    <span>{isUploading ? 'در حال بارگذاری و بهینه‌سازی...' : 'انتخاب تصویر از سیستم'}</span>
                   </button>
                 </div>
               </div>
 
               {uploadError && (
-                <div className="p-3 rounded-xl bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800 text-red-600 dark:text-red-300 text-xs">
+                <div className="p-3.5 rounded-xl bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800 text-red-600 dark:text-red-300 text-xs">
                   {uploadError}
                 </div>
               )}
 
-              {/* Current Icon Preview */}
+              {/* Current Custom Icon Preview with Transparency Checkerboard */}
               {currentIcon && currentIcon.startsWith('/uploads/') && (
-                <div className="p-4 rounded-xl bg-slate-100 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-lg bg-white dark:bg-slate-900 border p-1.5 flex items-center justify-center">
-                      <img src={currentIcon} alt="Current custom icon" className="w-full h-full object-contain" />
+                <div className="p-4 rounded-2xl bg-slate-100/80 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      {/* Checkerboard Pattern for transparent PNG inspection */}
+                      <div
+                        className="w-12 h-12 rounded-xl border border-slate-300 dark:border-slate-600 p-1 flex items-center justify-center shadow-xs overflow-hidden"
+                        style={{
+                          backgroundImage: `linear-gradient(45deg, #cbd5e1 25%, transparent 25%), linear-gradient(-45deg, #cbd5e1 25%, transparent 25%), linear-gradient(45deg, transparent 75%, #cbd5e1 75%), linear-gradient(-45deg, transparent 75%, #cbd5e1 75%)`,
+                          backgroundSize: '12px 12px',
+                          backgroundPosition: '0 0, 0 6px, 6px -6px, -6px 0px',
+                          backgroundColor: '#f8fafc'
+                        }}
+                      >
+                        <img
+                          src={currentIcon}
+                          alt="Custom icon"
+                          className="w-full h-full object-contain"
+                          referrerPolicy="no-referrer"
+                        />
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <p className="text-xs font-bold text-slate-800 dark:text-slate-200">
+                            تصویر سفارشی انتخاب‌شده
+                          </p>
+                          <span className="text-[10px] px-2 py-0.5 rounded-full bg-blue-100 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 font-mono">
+                            فعال
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-slate-500 dark:text-slate-400 font-mono truncate max-w-xs mt-0.5" dir="ltr">
+                          {currentIcon}
+                        </p>
+                      </div>
                     </div>
-                    <div>
-                      <p className="text-xs font-semibold text-slate-800 dark:text-slate-200">
-                        Current Custom Icon
-                      </p>
-                      <p className="text-[10px] text-slate-500 dark:text-slate-400 font-mono truncate max-w-xs">
-                        {currentIcon}
-                      </p>
+
+                    <button
+                      type="button"
+                      onClick={() => onSelectIcon('terminal')}
+                      className="px-3 py-1.5 rounded-xl text-red-500 hover:bg-red-50 dark:hover:bg-red-950/40 border border-red-200/60 dark:border-red-900/40 transition-colors text-xs font-semibold flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                      <span>حذف و بازگشت به آیکون پیش‌فرض</span>
+                    </button>
+                  </div>
+
+                  {/* Visual Test on Light vs Dark */}
+                  <div className="pt-2 border-t border-slate-200/60 dark:border-slate-700/60 flex items-center justify-between text-xs text-slate-500">
+                    <span>پیش‌نمایش روی پس‌زمینه‌های مختلف:</span>
+                    <div className="flex items-center gap-3">
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-[10px]">روشن:</span>
+                        <div className="w-7 h-7 rounded-lg bg-white border border-slate-200 p-1 flex items-center justify-center shadow-2xs">
+                          <img src={currentIcon} alt="light preview" className="w-full h-full object-contain" />
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-[10px]">تیره:</span>
+                        <div className="w-7 h-7 rounded-lg bg-slate-900 border border-slate-800 p-1 flex items-center justify-center shadow-2xs">
+                          <img src={currentIcon} alt="dark preview" className="w-full h-full object-contain" />
+                        </div>
+                      </div>
                     </div>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => onSelectIcon('terminal')}
-                    className="p-2 rounded-lg text-red-500 hover:bg-red-50 dark:hover:bg-red-950/40 transition-colors text-xs font-medium flex items-center gap-1"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                    <span>Reset</span>
-                  </button>
                 </div>
               )}
             </div>
@@ -280,16 +368,16 @@ export const IconPickerModal: React.FC<IconPickerModalProps> = ({
         {/* Footer */}
         <div className="p-4 border-t border-slate-100 dark:border-slate-800 flex justify-between items-center bg-slate-50/50 dark:bg-slate-950/50">
           <div className="flex items-center gap-2">
-            <span className="text-xs text-slate-500 dark:text-slate-400">Current selection:</span>
+            <span className="text-xs text-slate-500 dark:text-slate-400">آیکون انتخاب‌شده:</span>
             <div className="w-6 h-6 rounded bg-slate-200 dark:bg-slate-800 p-0.5 flex items-center justify-center">
               <AppIcon icon={currentIcon} className="w-5 h-5" />
             </div>
           </div>
           <button
             onClick={onClose}
-            className="px-4 py-1.5 rounded-xl text-xs font-semibold bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 transition-colors"
+            className="px-4 py-1.5 rounded-xl text-xs font-semibold bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 transition-colors cursor-pointer"
           >
-            Done
+            تایید و پایان
           </button>
         </div>
       </div>

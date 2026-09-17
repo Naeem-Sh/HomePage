@@ -1,13 +1,113 @@
 export interface BuiltinIcon {
   id: string;
   name: string;
-  category: 'os' | 'infra' | 'monitoring' | 'media' | 'storage' | 'network' | 'dev' | 'smarthome' | 'general';
+  category: 'office' | 'infra' | 'storage' | 'network' | 'monitoring' | 'media' | 'dev' | 'os' | 'smarthome' | 'general';
   tags: string[];
   color: string;
   svg: string;
 }
 
 export const BUILTIN_ICONS: BuiltinIcon[] = [
+  // ==========================================
+  // 0. CORPORATE, OFFICE & DOCUMENTS (Featured)
+  // ==========================================
+  {
+    id: 'phone-directory',
+    name: 'راهنمای تلفن و مخاطبین',
+    category: 'office',
+    tags: ['phone', 'directory', 'contacts', 'call', 'staff', 'office'],
+    color: '#0284C7',
+    svg: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v16a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4z"/><path d="M8 2v20"/><circle cx="14" cy="9" r="2.5"/><path d="M10.5 16a3.5 3.5 0 0 1 7 0"/><path d="M2 7h2"/><path d="M2 12h2"/><path d="M2 17h2"/></svg>`
+  },
+  {
+    id: 'pdf-document',
+    name: 'سند PDF و دستورالعمل',
+    category: 'office',
+    tags: ['pdf', 'document', 'guide', 'file', 'read'],
+    color: '#DC2626',
+    svg: `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M14 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6zm4 18H6V4h7v5h5v11z"/><path d="M7.5 13h2a1.5 1.5 0 0 1 0 3h-1v2h-1v-5zm1 2h1a.5.5 0 0 0 0-1h-1v1zm3.5-2h1.8a1.5 1.5 0 0 1 1.5 1.5v2a1.5 1.5 0 0 1-1.5 1.5H12v-5zm1 4h.8a.5.5 0 0 0 .5-.5v-2a.5.5 0 0 0-.5-.5H13v3zm3.5-4h2.5v1h-1.5v1h1.2v1H16.5v2h-1v-5z"/></svg>`
+  },
+  {
+    id: 'network-share-folder',
+    name: 'پوشه اشتراک شبکه (SMB/UNC)',
+    category: 'storage',
+    tags: ['share', 'smb', 'cifs', 'network', 'folder', 'lan', 'storage'],
+    color: '#4F46E5',
+    svg: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-.82-1.2A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z"/><path d="M12 11v6"/><path d="M9 14h6"/><circle cx="12" cy="14" r="1.5"/></svg>`
+  },
+  {
+    id: 'office-automation',
+    name: 'اتوماسیون اداری و نامه‌ها',
+    category: 'office',
+    tags: ['automation', 'erp', 'letters', 'office', 'workflow'],
+    color: '#0D9488',
+    svg: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/><circle cx="12" cy="14" r="2"/></svg>`
+  },
+  {
+    id: 'attendance-hrm',
+    name: 'حضور و غیاب و پرسنلی',
+    category: 'office',
+    tags: ['hrm', 'attendance', 'personnel', 'time', 'staff'],
+    color: '#2563EB',
+    svg: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="3"/><circle cx="9" cy="11" r="2.5"/><path d="M5.5 17a3.5 3.5 0 0 1 7 0"/><path d="M15 9h3"/><path d="M15 13h3"/><path d="M15 17h2"/></svg>`
+  },
+  {
+    id: 'financial-accounting',
+    name: 'سیستم مالی و حسابداری',
+    category: 'office',
+    tags: ['accounting', 'finance', 'money', 'ledger', 'tax'],
+    color: '#16A34A',
+    svg: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18"/><path d="M9 21V9"/><circle cx="15" cy="15" r="2.5"/><path d="M15 13.5v3"/></svg>`
+  },
+  {
+    id: 'it-helpdesk',
+    name: 'پشتیبانی فنی و تیکتینگ',
+    category: 'office',
+    tags: ['support', 'helpdesk', 'ticket', 'it', 'service'],
+    color: '#EA580C',
+    svg: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 18v-6a9 9 0 0 1 18 0v6"/><path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3zM3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z"/><path d="M12 21a3 3 0 0 0 3-3"/></svg>`
+  },
+  {
+    id: 'network-printer',
+    name: 'پرینتر و اسکنر سازمانی',
+    category: 'office',
+    tags: ['printer', 'scanner', 'cups', 'print', 'hardware'],
+    color: '#64748B',
+    svg: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9V2h12v7"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8" rx="1"/><circle cx="18" cy="12" r="1" fill="currentColor"/></svg>`
+  },
+  {
+    id: 'cctv-camera',
+    name: 'دوربین مداربسته و حراست',
+    category: 'infra',
+    tags: ['cctv', 'camera', 'security', 'nvr', 'video'],
+    color: '#0891B2',
+    svg: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7h12l4 4v5H3V7z"/><circle cx="9" cy="13" r="2.5"/><path d="M19 11l3-2v6l-3-2"/><path d="M7 7V3h4v4"/></svg>`
+  },
+  {
+    id: 'cisco',
+    name: 'Cisco Systems',
+    category: 'network',
+    tags: ['cisco', 'switch', 'router', 'network', 'ios'],
+    color: '#1BA0D7',
+    svg: `<svg viewBox="0 0 24 24" fill="currentColor"><rect x="3" y="10" width="1.5" height="5" rx=".75"/><rect x="6.5" y="6" width="1.5" height="12" rx=".75"/><rect x="10" y="9" width="1.5" height="8" rx=".75"/><rect x="13.5" y="6" width="1.5" height="12" rx=".75"/><rect x="17" y="10" width="1.5" height="6" rx=".75"/><rect x="20.5" y="13" width="1.5" height="3" rx=".75"/></svg>`
+  },
+  {
+    id: 'mikrotik',
+    name: 'MikroTik RouterOS',
+    category: 'network',
+    tags: ['mikrotik', 'routeros', 'router', 'winbox'],
+    color: '#000000',
+    svg: `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M4 4h4v7.5L12 7l4 4.5V4h4v16h-4v-7.5L12 17l-4-4.5V20H4V4z"/></svg>`
+  },
+  {
+    id: 'linux-tux',
+    name: 'Linux Tux Penguin',
+    category: 'os',
+    tags: ['linux', 'tux', 'kernel', 'gnu'],
+    color: '#F59E0B',
+    svg: `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2c-2.2 0-3.8 1.8-3.8 4 0 .6.1 1.2.3 1.7C7.3 8.3 6 10 6 12c0 2 .8 3.8 2.2 4.9L7 20h10l-1.2-3.1C17.2 15.8 18 14 18 12c0-2-1.3-3.7-2.5-4.3.2-.5.3-1.1.3-1.7 0-2.2-1.6-4-3.8-4zm-1 3.5a1 1 0 1 1 0 2 1 1 0 0 1 0-2zm2 0a1 1 0 1 1 0 2 1 1 0 0 1 0-2zM12 7c.8 0 1.5.4 1.5 1s-.7 1-1.5 1-1.5-.4-1.5-1 .7-1 1.5-1zm0 4c2.2 0 4 2.2 4 5s-1.8 5-4 5-4-2.2-4-5 1.8-5 4-5z"/></svg>`
+  },
+
   // ==========================================
   // 1. LINUX OS & DISTRIBUTIONS (20 icons)
   // ==========================================
@@ -197,7 +297,7 @@ export const BUILTIN_ICONS: BuiltinIcon[] = [
     category: 'infra',
     tags: ['containers', 'docker', 'stacks', 'ui'],
     color: '#13BEF9',
-    svg: `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2zm3.5 14.5h-7a.5.5 0 0 1-.5-.5V8a.5.5 0 0 1 .5-.5h7a.5.5 0 0 1 .5.5v8a.5.5 0 0 1-.5.5zm-5-6h3v1h-3zm0 2h3v1h-3zm0 2h3v1h-3z"/></svg>`
+    svg: `<svg viewBox="1 1 22 22" fill="currentColor"><path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2zm3.5 14.5h-7a.5.5 0 0 1-.5-.5V8a.5.5 0 0 1 .5-.5h7a.5.5 0 0 1 .5.5v8a.5.5 0 0 1-.5.5zm-5-6h3v1h-3zm0 2h3v1h-3zm0 2h3v1h-3z"/></svg>`
   },
   {
     id: 'kubernetes',

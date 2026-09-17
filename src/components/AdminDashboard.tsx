@@ -15,6 +15,7 @@ import {
   Download,
   CheckCircle2,
   XCircle,
+  X,
   Clock,
   LogOut,
   ExternalLink,
@@ -35,7 +36,21 @@ import {
   Image as ImageIcon,
   Sliders,
   ScrollText,
-  FileText
+  FileText,
+  Folder,
+  Archive,
+  FileArchive,
+  PackageCheck,
+  AlertCircle,
+  LayoutGrid,
+  List,
+  Tag,
+  ShieldCheck,
+  Link2,
+  FileSpreadsheet,
+  FileJson,
+  AlertTriangle,
+  RotateCcw
 } from 'lucide-react';
 import {
   Application,
@@ -45,16 +60,32 @@ import {
   SystemStats,
   SystemInfo,
   AuditLog,
-  TestResult,
   ThemeMode,
-  UploadedBackground
+  UploadedBackground,
+  BackupItem,
+  ActivityStats
 } from '../types';
 import { api, setStoredToken } from '../lib/api';
+import { toPersianDigits, formatPersianDate, formatBytes } from '../lib/utils';
 import { AppIcon } from './AppIcon';
 import { IconPickerModal } from './IconPickerModal';
 import { ThemeToggle } from './ThemeToggle';
+import { BgThemePicker } from './BgThemePicker';
+import { getStoredBgTheme, setStoredBgTheme } from '../lib/bgThemes';
 import { HostTelemetryBar } from './HostTelemetryBar';
 import { DashboardSwitcher } from './DashboardSwitcher';
+import { AnalogClock } from './AnalogClock';
+import { TelemetryDashboard } from './TelemetryDashboard';
+import { AdminConsoleBackground, AdminBgStyle } from './AdminConsoleBackground';
+import {
+  exportToExcel,
+  parseExcelFile,
+  downloadExcelTemplate,
+  exportToJson,
+  parseJsonFile,
+  ParsedBackupResult
+} from '../lib/excelBackup';
+import { ImportPreviewModal } from './ImportPreviewModal';
 
 interface AdminDashboardProps {
   currentUser: { id: string; username: string; role: string };
@@ -64,7 +95,36 @@ interface AdminDashboardProps {
   onThemeToggle: (theme: ThemeMode) => void;
 }
 
-type AdminTab = 'overview' | 'applications' | 'users' | 'appearance' | 'logs' | 'system' | 'tests';
+type AdminTab = 'overview' | 'applications' | 'categories' | 'users' | 'appearance' | 'logs' | 'system';
+
+const AdminDigitalClock: React.FC = () => {
+  const [timeStr, setTimeStr] = useState(() =>
+    toPersianDigits(
+      new Date().toLocaleTimeString('fa-IR', {
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit'
+      })
+    )
+  );
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setTimeStr(
+        toPersianDigits(
+          new Date().toLocaleTimeString('fa-IR', {
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit'
+          })
+        )
+      );
+    }, 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  return <span className="font-mono font-bold text-indigo-600 dark:text-indigo-400 text-xs tracking-wider">{timeStr}</span>;
+};
 
 export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   currentUser,
@@ -74,7 +134,21 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   onThemeToggle
 }) => {
   const [activeTab, setActiveTab] = useState<AdminTab>('overview');
+  const [bgThemeId, setBgThemeId] = useState<string>(() => getStoredBgTheme());
+  const [adminBgStyle, setAdminBgStyle] = useState<AdminBgStyle>(() => {
+    return (localStorage.getItem('homelab_admin_bg_style') as AdminBgStyle) || 'blueprint';
+  });
   const [isLoading, setIsLoading] = useState(true);
+
+  const handleAdminBgStyleChange = (style: AdminBgStyle) => {
+    setAdminBgStyle(style);
+    localStorage.setItem('homelab_admin_bg_style', style);
+  };
+
+  const handleBgThemeChange = (newThemeId: string) => {
+    setBgThemeId(newThemeId);
+    setStoredBgTheme(newThemeId);
+  };
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
@@ -111,22 +185,144 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   // Modals & Form States
   const [editingApp, setEditingApp] = useState<Partial<Application> | null>(null);
   const [isAppModalOpen, setIsAppModalOpen] = useState(false);
+  const [editingCategory, setEditingCategory] = useState<Partial<Category> | null>(null);
+  const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<(Partial<User> & { password?: string }) | null>(null);
   const [isUserModalOpen, setIsUserModalOpen] = useState(false);
   const [isIconPickerOpen, setIsIconPickerOpen] = useState(false);
+  const [iconPickerInitialTab, setIconPickerInitialTab] = useState<'builtin' | 'upload'>('builtin');
+  const iconDirectInputRef = useRef<HTMLInputElement>(null);
+  const [isUploadingIconDirect, setIsUploadingIconDirect] = useState(false);
+  const [isIconSectionDragOver, setIsIconSectionDragOver] = useState(false);
 
-  // Tests State
-  const [testResults, setTestResults] = useState<{ success: boolean; tests: TestResult[] } | null>(null);
-  const [isRunningTests, setIsRunningTests] = useState(false);
+  // Backup & Activity States
+  const [backups, setBackups] = useState<BackupItem[]>([]);
+  const [isLoadingBackups, setIsLoadingBackups] = useState(false);
+  const [isCreatingBackup, setIsCreatingBackup] = useState(false);
+  const [isRestoringBackup, setIsRestoringBackup] = useState<string | null>(null);
+  const [isUploadingBackup, setIsUploadingBackup] = useState(false);
+  const [activityStats, setActivityStats] = useState<ActivityStats | null>(null);
 
   // Logo file ref, background file ref & backup ref
   const logoInputRef = useRef<HTMLInputElement>(null);
   const bgInputRef = useRef<HTMLInputElement>(null);
   const importFileRef = useRef<HTMLInputElement>(null);
+  const excelImportRef = useRef<HTMLInputElement>(null);
+  const jsonImportRef = useRef<HTMLInputElement>(null);
+  const zipBackupInputRef = useRef<HTMLInputElement>(null);
+  const [importPreview, setImportPreview] = useState<{
+    fileType: 'excel' | 'json';
+    fileName: string;
+    parsed: ParsedBackupResult;
+  } | null>(null);
+  const [isApplyingImport, setIsApplyingImport] = useState(false);
+  const [showResetConfirmModal, setShowResetConfirmModal] = useState(false);
+  const [isResetting, setIsResetting] = useState(false);
+  const [wipeUploadsOnReset, setWipeUploadsOnReset] = useState(false);
+  const appDocumentInputRef = useRef<HTMLInputElement>(null);
+  const quickPdfInputRef = useRef<HTMLInputElement>(null);
+  const [isUploadingAppDoc, setIsUploadingAppDoc] = useState(false);
+  const [isQuickUploadingPdf, setIsQuickUploadingPdf] = useState(false);
+  const [isDocDragOver, setIsDocDragOver] = useState(false);
+  const [serverDocsModalOpen, setServerDocsModalOpen] = useState(false);
+  const [serverDocsList, setServerDocsList] = useState<Array<{ filename: string; url: string; size: number; createdAt: string; ext: string }>>([]);
+  const [isLoadingDocs, setIsLoadingDocs] = useState(false);
+  const [docSearchQuery, setDocSearchQuery] = useState('');
+  const [appDestType, setAppDestType] = useState<'url' | 'file'>('url');
+  const [isModalUrlCopied, setIsModalUrlCopied] = useState(false);
+
+  const openAppEditModal = (app?: Application) => {
+    setIsModalUrlCopied(false);
+    if (app) {
+      const isFile = Boolean(app.fileUrl || (app.url && (app.url.startsWith('/uploads/') || app.url.toLowerCase().endsWith('.pdf'))));
+      setAppDestType(isFile ? 'file' : 'url');
+      setEditingApp({
+        ...app,
+        fileUrl: app.fileUrl || (isFile ? app.url : undefined),
+        fileName: app.fileName || (isFile ? app.url.split('/').pop() : undefined)
+      });
+    } else {
+      setEditingApp({
+        name: '',
+        description: '',
+        url: '',
+        categoryId: categories[0]?.id || 'cat-general',
+        icon: 'terminal',
+        isPublic: true,
+        dashboards: ['public', 'it_staff', 'admin'],
+        isEnabled: true,
+        sortOrder: applications.length + 1,
+        accentColor: '#3B82F6',
+        openInNewTab: true
+      });
+      setAppDestType('url');
+    }
+    setIsAppModalOpen(true);
+  };
+
+  const handleDirectIconUpload = async (file: File) => {
+    if (!file) return;
+    setIsUploadingIconDirect(true);
+    try {
+      const res = await api.uploadIcon(file);
+      if (res.success && res.iconUrl) {
+        setEditingApp((prev) => (prev ? { ...prev, icon: res.iconUrl } : null));
+        showNotification('تصویر آیکون (PNG شفاف / JPG) با موفقیت بارگذاری و جایگزین شد');
+      }
+    } catch (err: any) {
+      setError(err.message || 'خطا در بارگذاری تصویر آیکون');
+    } finally {
+      setIsUploadingIconDirect(false);
+      if (iconDirectInputRef.current) {
+        iconDirectInputRef.current.value = '';
+      }
+    }
+  };
 
   // Filter query in applications list
   const [appSearch, setAppSearch] = useState('');
-  const [appDashboardFilter, setAppDashboardFilter] = useState<'all' | 'public' | 'admin'>('all');
+  const [appDashboardFilter, setAppDashboardFilter] = useState<'all' | 'public' | 'it_staff' | 'admin'>('all');
+  const [appCategoryFilter, setAppCategoryFilter] = useState<string>('all');
+  const [appsViewMode, setAppsViewMode] = useState<'cards' | 'table'>('cards');
+  const [copiedAppId, setCopiedAppId] = useState<string | null>(null);
+
+  const handleCopyAppUrl = async (app: Application, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    const text = app.fileUrl || app.url;
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedAppId(app.id);
+      setTimeout(() => setCopiedAppId(null), 2000);
+      showNotification(`آدرس یا مسیر «${app.name}» کپی شد.`);
+    } catch {
+      // fallback
+    }
+  };
+
+  const handleCopyModalUrl = async () => {
+    const targetUrl = (appDestType === 'file' ? (editingApp?.fileUrl || editingApp?.url) : editingApp?.url)?.trim();
+    if (!targetUrl) return;
+    try {
+      await navigator.clipboard.writeText(targetUrl);
+      setIsModalUrlCopied(true);
+      showNotification('آدرس در حافظه موقت (کلیپ‌بورد) کپی شد.');
+      setTimeout(() => setIsModalUrlCopied(false), 2200);
+    } catch {
+      try {
+        const textarea = document.createElement('textarea');
+        textarea.value = targetUrl;
+        document.body.appendChild(textarea);
+        textarea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textarea);
+        setIsModalUrlCopied(true);
+        showNotification('آدرس در حافظه موقت کپی شد.');
+        setTimeout(() => setIsModalUrlCopied(false), 2200);
+      } catch (err) {
+        console.error('Failed to copy', err);
+      }
+    }
+  };
 
   // Audit Logs Tab States
   const [logSearch, setLogSearch] = useState('');
@@ -156,6 +352,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         setSystemInfo(overviewRes.value.system);
         setSettings(overviewRes.value.settings);
         setAuditLogs(overviewRes.value.recentLogs);
+        if (overviewRes.value.activity) {
+          setActivityStats(overviewRes.value.activity);
+        }
       }
       if (appsRes.status === 'fulfilled') {
         setApplications(appsRes.value);
@@ -182,47 +381,363 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     }
   };
 
+  const loadBackups = async () => {
+    setIsLoadingBackups(true);
+    try {
+      const list = await api.listBackups();
+      setBackups(list);
+    } catch (err: any) {
+      console.error('Failed to load backups:', err);
+    } finally {
+      setIsLoadingBackups(false);
+    }
+  };
+
   useEffect(() => {
     loadData();
+    loadBackups();
   }, []);
+
+  // --- ZIP Backup Handlers ---
+  const handleCreateZipBackup = async () => {
+    setIsCreatingBackup(true);
+    try {
+      await api.createBackup();
+      showNotification('نسخه پشتیبان کامل ZIP با موفقیت ایجاد و ذخیره شد.');
+      await loadBackups();
+    } catch (err: any) {
+      setError(err.message || 'خطا در ایجاد نسخه پشتیبان ZIP');
+    } finally {
+      setIsCreatingBackup(false);
+    }
+  };
+
+  const handleRestoreZipBackup = async (filename: string) => {
+    if (!window.confirm(`آیا از بازگردانی نسخه «${filename}» اطمینان دارید؟ تمام داده‌ها، تنظیمات و فایل‌های فعلی با این نسخه بازنویسی می‌شوند.`)) {
+      return;
+    }
+    setIsRestoringBackup(filename);
+    try {
+      await api.restoreBackup(filename);
+      showNotification('نسخه پشتیبان با موفقیت بازگردانی شد! صفحه تازه‌سازی می‌شود...');
+      setTimeout(() => {
+        window.location.reload();
+      }, 1200);
+    } catch (err: any) {
+      setError(err.message || 'خطا در بازیابی نسخه پشتیبان');
+      setIsRestoringBackup(null);
+    }
+  };
+
+  const handleUploadZipBackup = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!window.confirm('آیا از آپلود و بازیابی فوری این فایل پشتیبان ZIP اطمینان دارید؟ تمام داده‌های فعلی جایگزین خواهند شد.')) {
+      if (zipBackupInputRef.current) zipBackupInputRef.current.value = '';
+      return;
+    }
+
+    setIsUploadingBackup(true);
+    try {
+      await api.uploadAndRestoreBackup(file);
+      showNotification('فایل پشتیبان با موفقیت آپلود و بازیابی شد! صفحه تازه‌سازی می‌شود...');
+      setTimeout(() => {
+        window.location.reload();
+      }, 1200);
+    } catch (err: any) {
+      setError(err.message || 'خطا در آپلود و بازیابی فایل پشتیبان ZIP');
+    } finally {
+      setIsUploadingBackup(false);
+      if (zipBackupInputRef.current) zipBackupInputRef.current.value = '';
+    }
+  };
+
+  const handleDeleteZipBackup = async (filename: string) => {
+    if (!window.confirm(`آیا از حذف دائمی نسخه پشتیبان «${filename}» اطمینان دارید؟`)) return;
+    try {
+      await api.deleteBackup(filename);
+      showNotification('نسخه پشتیبان با موفقیت حذف شد.');
+      setBackups(prev => prev.filter(b => b.filename !== filename));
+    } catch (err: any) {
+      setError(err.message || 'خطا در حذف نسخه پشتیبان');
+    }
+  };
+
+  const handleResetDatabase = async () => {
+    setIsResetting(true);
+    try {
+      const res = await api.resetDatabase({ wipeUploads: wipeUploadsOnReset });
+      if (res.success) {
+        showNotification('کلیه داده‌های برنامه‌ها و دسته‌ها پاک شدند و تنظیمات ریست شد. اکنون می‌توانید با یکی از ۳ فایل اطلاعات را برگردانید.');
+        setShowResetConfirmModal(false);
+        await loadData();
+        await loadBackups();
+      } else {
+        setError(res.message || 'خطا در بازنشانی پایگاه‌داده');
+      }
+    } catch (err: any) {
+      setError(err.message || 'خطا در برقراری ارتباط با سرور جهت ریست دیتابیس');
+    } finally {
+      setIsResetting(false);
+    }
+  };
+
+  const handleUploadAppDocument = async (fileOrEvent: React.ChangeEvent<HTMLInputElement> | File) => {
+    let file: File | undefined;
+    if (fileOrEvent instanceof File) {
+      file = fileOrEvent;
+    } else if (fileOrEvent?.target?.files?.[0]) {
+      file = fileOrEvent.target.files[0];
+    }
+    if (!file || !editingApp) return;
+
+    setIsUploadingAppDoc(true);
+    try {
+      const res = await api.uploadDocument(file);
+      showNotification(`فایل «${res.originalName}» با موفقیت در سرور ذخیره شد و پیوند آن تنظیم گردید.`);
+
+      const ext = file.name.split('.').pop()?.toLowerCase() || '';
+      let suggestedIcon = editingApp.icon || 'FileText';
+      let suggestedColor = editingApp.accentColor || '#3B82F6';
+
+      if (['pdf'].includes(ext)) {
+        suggestedIcon = 'FileText';
+        suggestedColor = '#EF4444'; // PDF Crimson Red
+      } else if (['jpg', 'jpeg', 'png', 'svg', 'webp', 'gif'].includes(ext)) {
+        suggestedIcon = 'Image';
+        suggestedColor = '#10B981';
+      } else if (['mp4', 'mkv', 'webm', 'mov'].includes(ext)) {
+        suggestedIcon = 'Film';
+        suggestedColor = '#8B5CF6';
+      } else if (['mp3', 'wav', 'ogg', 'flac'].includes(ext)) {
+        suggestedIcon = 'Music';
+        suggestedColor = '#EC4899';
+      } else if (['zip', 'rar', 'tar', 'gz', '7z'].includes(ext)) {
+        suggestedIcon = 'Archive';
+        suggestedColor = '#F59E0B';
+      } else if (['json', 'yaml', 'yml', 'xml', 'txt', 'md'].includes(ext)) {
+        suggestedIcon = 'FileCode2';
+        suggestedColor = '#06B6D4';
+      }
+
+      const cleanName = file.name.replace(/\.[^/.]+$/, '').replace(/_/g, ' ').replace(/-/g, ' ');
+      const appName = editingApp.name?.trim() ? editingApp.name : cleanName;
+      const appDesc = editingApp.description?.trim()
+        ? editingApp.description
+        : ext === 'pdf'
+        ? 'سند PDF ذخیره شده روی سرور'
+        : `فایل ${ext.toUpperCase()} ذخیره شده روی سرور`;
+
+      setEditingApp({
+        ...editingApp,
+        url: res.url,
+        fileUrl: res.url,
+        fileName: file.name,
+        openInNewTab: true,
+        name: appName,
+        description: appDesc,
+        icon: suggestedIcon,
+        accentColor: suggestedColor
+      });
+      setAppDestType('file');
+    } catch (err: any) {
+      setError(err.message || 'خطا در آپلود فایل');
+    } finally {
+      setIsUploadingAppDoc(false);
+      setIsDocDragOver(false);
+      if (appDocumentInputRef.current) appDocumentInputRef.current.value = '';
+    }
+  };
+
+  const handleQuickCreatePdfApp = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsQuickUploadingPdf(true);
+    try {
+      const res = await api.uploadDocument(file);
+      const ext = file.name.split('.').pop()?.toLowerCase() || '';
+      const isPdf = ext === 'pdf';
+      const cleanName = file.name.replace(/\.[^/.]+$/, '').replace(/_/g, ' ').replace(/-/g, ' ');
+
+      const newAppPayload = {
+        name: cleanName || 'سند PDF جدید',
+        description: isPdf ? 'سند PDF ذخیره شده در سرور (باز شدن مستقیم با ۱ کلیک)' : `فایل ${ext.toUpperCase()} در سرور`,
+        url: res.url,
+        fileUrl: res.url,
+        fileName: file.name,
+        categoryId: categories[0]?.id || 'cat-infra',
+        icon: isPdf ? 'FileText' : 'FileCode2',
+        isPublic: true,
+        dashboards: ['public', 'admin'],
+        isEnabled: true,
+        sortOrder: applications.length + 1,
+        accentColor: isPdf ? '#EF4444' : '#3B82F6',
+        openInNewTab: true,
+        tags: ['pdf', 'document', 'server-file']
+      };
+
+      const created = await api.createApplication(newAppPayload as any);
+      setApplications((prev) => [...prev, created]);
+      showNotification(`دکمه جدید برای فایل «${cleanName}» ذخیره شد و در صفحه اصلی آماده باز شدن با ۱ کلیک است.`);
+    } catch (err: any) {
+      setError(err.message || 'خطا در آپلود و ساخت دکمه PDF');
+    } finally {
+      setIsQuickUploadingPdf(false);
+      if (quickPdfInputRef.current) quickPdfInputRef.current.value = '';
+    }
+  };
+
+  const handleCreateAppFromDoc = async (doc: { filename: string; url: string; ext: string }) => {
+    try {
+      const isPdf = doc.ext === 'pdf';
+      const cleanTitle = doc.filename
+        .replace(/^doc-/, '')
+        .replace(/-[a-f0-9]{8}\.[^.]+$/, '')
+        .replace(/_/g, ' ')
+        .replace(/-/g, ' ');
+
+      const newAppPayload = {
+        name: cleanTitle || 'سند سرور',
+        description: isPdf ? 'سند PDF ذخیره شده در سرور (باز شدن مستقیم با ۱ کلیک)' : `فایل ${doc.ext.toUpperCase()} در سرور`,
+        url: doc.url,
+        fileUrl: doc.url,
+        fileName: doc.filename,
+        categoryId: categories[0]?.id || 'cat-infra',
+        icon: isPdf ? 'FileText' : 'FileCode2',
+        isPublic: true,
+        dashboards: ['public', 'admin'],
+        isEnabled: true,
+        sortOrder: applications.length + 1,
+        accentColor: isPdf ? '#EF4444' : '#3B82F6',
+        openInNewTab: true,
+        tags: ['pdf', 'document']
+      };
+
+      const created = await api.createApplication(newAppPayload as any);
+      setApplications((prev) => [...prev, created]);
+      setServerDocsModalOpen(false);
+      showNotification(`دکمه جدید «${cleanTitle}» در داشبورد ایجاد گردید.`);
+    } catch (err: any) {
+      setError(err.message || 'خطا در ساخت دکمه');
+    }
+  };
+
+  const loadServerDocs = async () => {
+    setIsLoadingDocs(true);
+    try {
+      const docs = await api.listDocuments();
+      setServerDocsList(docs);
+    } catch {
+      // Ignore
+    } finally {
+      setIsLoadingDocs(false);
+    }
+  };
+
+  const handleOpenServerDocsModal = () => {
+    setServerDocsModalOpen(true);
+    loadServerDocs();
+  };
+
+  const handleSelectDocForApp = (doc: { filename: string; url: string; ext: string }) => {
+    if (!editingApp) return;
+    let suggestedIcon = editingApp.icon || 'FileText';
+    if (['pdf'].includes(doc.ext)) suggestedIcon = 'FileText';
+    else if (['jpg', 'jpeg', 'png', 'svg', 'webp', 'gif'].includes(doc.ext)) suggestedIcon = 'Image';
+    else if (['mp4', 'mkv', 'webm', 'mov'].includes(doc.ext)) suggestedIcon = 'Film';
+    else if (['mp3', 'wav', 'ogg', 'flac'].includes(doc.ext)) suggestedIcon = 'Music';
+    else if (['zip', 'rar', 'tar', 'gz', '7z'].includes(doc.ext)) suggestedIcon = 'Archive';
+    else if (['json', 'yaml', 'yml', 'xml', 'txt', 'md'].includes(doc.ext)) suggestedIcon = 'FileCode2';
+
+    const cleanTitle = doc.filename
+      .replace(/^doc-/, '')
+      .replace(/-[a-f0-9]{8}\.[^.]+$/, '')
+      .replace(/_/g, ' ');
+
+    setEditingApp({
+      ...editingApp,
+      url: doc.url,
+      fileUrl: doc.url,
+      fileName: doc.filename,
+      openInNewTab: true,
+      name: editingApp.name?.trim() ? editingApp.name : cleanTitle,
+      icon: suggestedIcon
+    });
+    setAppDestType('file');
+    setServerDocsModalOpen(false);
+    showNotification(`فایل «${doc.filename}» برای این کارت انتخاب شد.`);
+  };
+
+  const handleDeleteServerDoc = async (filename: string) => {
+    if (!window.confirm(`آیا از حذف فایل «${filename}» از سرور اطمینان دارید؟`)) return;
+    try {
+      await api.deleteDocument(filename);
+      setServerDocsList((prev) => prev.filter((d) => d.filename !== filename));
+      showNotification(`فایل «${filename}» با موفقیت حذف گردید.`);
+    } catch (err: any) {
+      setError(err.message || 'خطا در حذف فایل');
+    }
+  };
 
   // --- Application Handlers ---
   const handleSaveApp = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!editingApp || !editingApp.name || !editingApp.url) {
-      setError('Please fill in Application Name and Destination URL/Path');
+    if (!editingApp || !editingApp.name?.trim()) {
+      setError('لطفاً نام دکمه را وارد نمایید');
       return;
     }
 
+    const isFileMode = appDestType === 'file';
+    const destination = (isFileMode
+      ? (editingApp.fileUrl || editingApp.url)
+      : editingApp.url)?.trim();
+
+    if (!destination) {
+      setError(isFileMode ? 'لطفاً فایل را آپلود یا انتخاب نمایید' : 'لطفاً آدرس اینترنتی یا مسیر شبکه را وارد نمایید');
+      return;
+    }
+
+    const isDestFile = isFileMode || destination.startsWith('/uploads/') || destination.toLowerCase().endsWith('.pdf');
+    const finalFileUrl = isDestFile ? destination : undefined;
+    const finalFileName = isDestFile
+      ? (editingApp.fileName || destination.split('/').pop())
+      : undefined;
+
     const appPayload = {
       ...editingApp,
+      name: editingApp.name.trim(),
+      url: destination,
+      fileUrl: finalFileUrl,
+      fileName: finalFileName,
       categoryId: editingApp.categoryId || categories[0]?.id || 'cat-general'
     };
 
     try {
       if (editingApp.id) {
         await api.updateApplication(editingApp.id, appPayload);
-        showNotification(`Application "${editingApp.name}" updated successfully`);
+        showNotification(`دکمه «${editingApp.name}» به‌روزرسانی شد`);
       } else {
         await api.createApplication(appPayload);
-        showNotification(`Application "${editingApp.name}" created successfully`);
+        showNotification(`دکمه «${editingApp.name}» ایجاد شد`);
       }
       setIsAppModalOpen(false);
       setEditingApp(null);
       loadData();
     } catch (err: any) {
-      setError(err.message || 'Failed to save application');
+      setError(err.message || 'خطا در ذخیره‌سازی دکمه');
     }
   };
 
   const handleDeleteApp = async (id: string, name: string) => {
-    if (!window.confirm(`Are you sure you want to delete application "${name}"?`)) return;
+    if (!window.confirm(`آیا از حذف برنامه «${name}» اطمینان دارید؟`)) return;
     try {
       await api.deleteApplication(id);
-      showNotification(`Application "${name}" deleted`);
+      showNotification(`برنامه «${name}» حذف شد`);
       loadData();
     } catch (err: any) {
-      setError(err.message || 'Failed to delete application');
+      setError(err.message || 'خطا در حذف برنامه');
     }
   };
 
@@ -238,9 +753,66 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     setApplications(newApps);
     try {
       await api.reorderApplications(newApps.map((a) => a.id));
-      showNotification('Applications reordered');
+      showNotification('ترتیب جدید برنامه‌ها ذخیره شد');
     } catch (err: any) {
-      setError(err.message || 'Failed to reorder applications');
+      setError(err.message || 'خطا در تغییر چیدمان برنامه‌ها');
+      loadData();
+    }
+  };
+
+  // --- Category Handlers ---
+  const handleSaveCategory = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingCategory || !editingCategory.name) {
+      setError('لطفاً نام دسته‌بندی را وارد نمایید');
+      return;
+    }
+
+    try {
+      if (editingCategory.id) {
+        await api.updateCategory(editingCategory.id, editingCategory);
+        showNotification(`دسته‌بندی «${editingCategory.name}» به‌روزرسانی شد`);
+      } else {
+        await api.createCategory({
+          ...editingCategory,
+          sortOrder: categories.length + 1
+        });
+        showNotification(`دسته‌بندی «${editingCategory.name}» با موفقیت ایجاد شد`);
+      }
+      setIsCategoryModalOpen(false);
+      setEditingCategory(null);
+      loadData();
+    } catch (err: any) {
+      setError(err.message || 'خطا در ذخیره دسته‌بندی');
+    }
+  };
+
+  const handleDeleteCategory = async (id: string, name: string) => {
+    if (!window.confirm(`آیا از حذف دسته‌بندی «${name}» اطمینان دارید؟ برنامه‌های این دسته به دسته‌بندی عمومی منتقل می‌شوند.`)) return;
+    try {
+      await api.deleteCategory(id);
+      showNotification(`دسته‌بندی «${name}» حذف شد`);
+      loadData();
+    } catch (err: any) {
+      setError(err.message || 'خطا در حذف دسته‌بندی');
+    }
+  };
+
+  const handleMoveCategory = async (index: number, direction: 'up' | 'down') => {
+    const targetIndex = direction === 'up' ? index - 1 : index + 1;
+    if (targetIndex < 0 || targetIndex >= categories.length) return;
+
+    const newCats = [...categories];
+    const temp = newCats[index];
+    newCats[index] = newCats[targetIndex];
+    newCats[targetIndex] = temp;
+
+    setCategories(newCats);
+    try {
+      await api.reorderCategories(newCats.map((c) => c.id));
+      showNotification('ترتیب جدید اولویت دسته‌بندی‌ها ذخیره شد');
+    } catch (err: any) {
+      setError(err.message || 'خطا در تغییر اولویت دسته‌بندی‌ها');
       loadData();
     }
   };
@@ -253,31 +825,31 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     try {
       if (editingUser.id) {
         await api.updateUser(editingUser.id, editingUser);
-        showNotification(`User "${editingUser.username}" updated`);
+        showNotification(`کاربر «${editingUser.username}» به‌روزرسانی شد`);
       } else {
         if (!editingUser.password) {
-          setError('Password is required for new user');
+          setError('رمز عبور برای کاربر جدید الزامی است');
           return;
         }
         await api.createUser(editingUser as any);
-        showNotification(`User "${editingUser.username}" created`);
+        showNotification(`کاربر «${editingUser.username}» با موفقیت ایجاد شد`);
       }
       setIsUserModalOpen(false);
       setEditingUser(null);
       loadData();
     } catch (err: any) {
-      setError(err.message || 'Failed to save user');
+      setError(err.message || 'خطا در ذخیره کاربر');
     }
   };
 
   const handleDeleteUser = async (id: string, username: string) => {
-    if (!window.confirm(`Delete user "${username}"?`)) return;
+    if (!window.confirm(`آیا از حذف کاربر «${username}» اطمینان دارید؟`)) return;
     try {
       await api.deleteUser(id);
-      showNotification(`User "${username}" deleted`);
+      showNotification(`کاربر «${username}» حذف شد`);
       loadData();
     } catch (err: any) {
-      setError(err.message || 'Failed to delete user');
+      setError(err.message || 'خطا در حذف کاربر');
     }
   };
 
@@ -288,9 +860,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     try {
       const updated = await api.updateSettings(settings);
       setSettings(updated);
-      showNotification('Homepage settings updated successfully');
+      showNotification('تنظیمات ظاهر و داشبورد با موفقیت ذخیره شد');
     } catch (err: any) {
-      setError(err.message || 'Failed to update settings');
+      setError(err.message || 'خطا در ذخیره تنظیمات');
     }
   };
 
@@ -301,10 +873,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       const res = await api.uploadLogo(file);
       if (res.success) {
         setSettings((prev) => (prev ? { ...prev, logoUrl: res.logoUrl } : null));
-        showNotification('Homepage logo uploaded successfully');
+        showNotification('لوگوی سرور با موفقیت بارگذاری شد');
       }
     } catch (err: any) {
-      setError(err.message || 'Failed to upload logo');
+      setError(err.message || 'خطا در بارگذاری لوگو');
     } finally {
       if (logoInputRef.current) logoInputRef.current.value = '';
     }
@@ -314,9 +886,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     try {
       await api.deleteLogo();
       setSettings((prev) => (prev ? { ...prev, logoUrl: null } : null));
-      showNotification('Logo removed');
+      showNotification('لوگو حذف شد');
     } catch (err: any) {
-      setError(err.message || 'Failed to remove logo');
+      setError(err.message || 'خطا در حذف لوگو');
     }
   };
 
@@ -335,10 +907,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               }
             : null
         );
-        showNotification('Public background picture uploaded and set as active!');
+        showNotification('تصویر پس‌زمینه بارگذاری و به عنوان تصویر فعال انتخاب شد!');
       }
     } catch (err: any) {
-      setError(err.message || 'Failed to upload background picture');
+      setError(err.message || 'خطا در بارگذاری پس‌زمینه');
     } finally {
       if (bgInputRef.current) bgInputRef.current.value = '';
     }
@@ -348,14 +920,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     try {
       const updatedSettings = await api.selectBackground(url);
       setSettings(updatedSettings);
-      showNotification('Active public background updated');
+      showNotification('تصویر پس‌زمینه فعال داشبورد تغییر کرد');
     } catch (err: any) {
-      setError(err.message || 'Failed to select background');
+      setError(err.message || 'خطا در انتخاب پس‌زمینه');
     }
   };
 
   const handleDeleteUploadedBg = async (id: string, name: string) => {
-    if (!window.confirm(`Delete wallpaper "${name}" from upload library?`)) return;
+    if (!window.confirm(`آیا از حذف والپیپر «${name}» از کتابخانه اطمینان دارید؟`)) return;
     try {
       const res = await api.deleteUploadedBackground(id);
       if (res.success) {
@@ -368,10 +940,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               }
             : null
         );
-        showNotification('Wallpaper removed from upload library');
+        showNotification('تصویر از کتابخانه سرور حذف شد');
       }
     } catch (err: any) {
-      setError(err.message || 'Failed to delete wallpaper');
+      setError(err.message || 'خطا در حذف والپیپر');
     }
   };
 
@@ -379,76 +951,173 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     try {
       await api.deleteBackground();
       setSettings((prev) => (prev ? { ...prev, backgroundUrl: null } : null));
-      showNotification('Background picture reset to default mesh theme');
+      showNotification('تصویر پس‌زمینه ریست و به تم استاندارد بازگشت');
     } catch (err: any) {
-      setError(err.message || 'Failed to remove background picture');
+      setError(err.message || 'خطا در حذف پس‌زمینه');
     }
   };
 
-  // --- Backup & Restore ---
-  const handleExportBackup = async () => {
+  // --- Excel & JSON Data Portability & Backup ---
+  const handleExportExcel = () => {
     try {
-      const backup = await api.exportBackup();
-      const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `linxdash-backup-${new Date().toISOString().slice(0, 10)}.json`;
-      a.click();
-      URL.revokeObjectURL(url);
-      showNotification('Backup exported successfully');
+      exportToExcel(
+        { applications, categories, settings: settings || undefined },
+        settings?.title ? settings.title.replace(/\s+/g, '_') : 'homelab'
+      );
+      showNotification(
+        `خروجی اکسل با موفقیت ایجاد شد (${toPersianDigits(applications.length)} برنامه و ${toPersianDigits(categories.length)} دسته‌بندی)`
+      );
     } catch (err: any) {
-      setError(err.message || 'Failed to export backup');
+      setError(err.message || 'خطا در ایجاد خروجی اکسل');
     }
   };
 
-  const handleImportBackup = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleDownloadExcelTemplate = () => {
+    try {
+      downloadExcelTemplate();
+      showNotification('قالب آماده اکسل جهت ورود اطلاعات دانلود شد');
+    } catch (err: any) {
+      setError(err.message || 'خطا در دانلود قالب اکسل');
+    }
+  };
+
+  const handleExportJson = () => {
+    try {
+      exportToJson(
+        { applications, categories, settings: settings || undefined },
+        settings?.title ? settings.title.replace(/\s+/g, '_') : 'homelab'
+      );
+      showNotification('نسخه پشتیبان JSON با موفقیت دریافت شد');
+    } catch (err: any) {
+      setError(err.message || 'خطا در دریافت فایل JSON');
+    }
+  };
+
+  const handleExportBackup = handleExportJson;
+
+  const handleSelectExcelFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    try {
+      const parsed = await parseExcelFile(file, categories);
+      if (parsed.applications.length === 0 && parsed.categories.length === 0) {
+        setError('هیچ برنامه یا دسته‌بندی معتبری در فایل اکسل یافت نشد. لطفاً از قالب استاندارد اکسل استفاده کنید.');
+        return;
+      }
+      setImportPreview({
+        fileType: 'excel',
+        fileName: file.name,
+        parsed
+      });
+    } catch (err: any) {
+      setError('خطا در پردازش فایل اکسل: ' + (err.message || 'فرمت نامعتبر'));
+    } finally {
+      if (excelImportRef.current) excelImportRef.current.value = '';
+    }
+  };
+
+  const handleSelectJsonFile = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
     const reader = new FileReader();
-    reader.onload = async (event) => {
+    reader.onload = (event) => {
       try {
-        const json = JSON.parse(event.target?.result as string);
-        await api.importBackup(json);
-        showNotification('Configuration backup restored successfully!');
-        loadData();
+        const text = event.target?.result as string;
+        const parsed = parseJsonFile(text, categories);
+        if (parsed.applications.length === 0 && parsed.categories.length === 0 && !parsed.settings) {
+          setError('هیچ برنامه، دسته یا تنظیماتی در این فایل JSON شناسایی نشد.');
+          return;
+        }
+        setImportPreview({
+          fileType: 'json',
+          fileName: file.name,
+          parsed
+        });
       } catch (err: any) {
-        setError('Invalid backup file format or corrupt JSON');
+        setError('فایل JSON نامعتبر است: ' + (err.message || 'ساختار داده خراب است'));
       }
     };
     reader.readAsText(file);
+    if (jsonImportRef.current) jsonImportRef.current.value = '';
     if (importFileRef.current) importFileRef.current.value = '';
   };
 
-  // --- Automated Test Runner ---
-  const handleRunTests = async () => {
-    setIsRunningTests(true);
+  const handleConfirmImport = async (mode: 'merge' | 'replace') => {
+    if (!importPreview) return;
+    setIsApplyingImport(true);
+
     try {
-      const results = await api.runTests();
-      setTestResults(results);
-      if (results.success) {
-        showNotification('All automated verification tests passed cleanly!');
+      const { parsed } = importPreview;
+      let finalCategories: Category[] = [];
+      let finalApplications: Application[] = [];
+
+      if (mode === 'replace') {
+        finalCategories = parsed.categories.length > 0 ? parsed.categories : categories;
+        finalApplications = parsed.applications;
       } else {
-        setError('Some automated tests failed. Review results below.');
+        // Merge mode
+        finalCategories = [...categories];
+        parsed.categories.forEach((newCat) => {
+          const existingIdx = finalCategories.findIndex(
+            (c) => c.id === newCat.id || c.name.trim().toLowerCase() === newCat.name.trim().toLowerCase()
+          );
+          if (existingIdx >= 0) {
+            finalCategories[existingIdx] = { ...finalCategories[existingIdx], ...newCat };
+          } else {
+            finalCategories.push(newCat);
+          }
+        });
+
+        finalApplications = [...applications];
+        parsed.applications.forEach((newApp) => {
+          const existingIdx = finalApplications.findIndex(
+            (a) => a.id === newApp.id || (a.name.trim().toLowerCase() === newApp.name.trim().toLowerCase() && a.url === newApp.url)
+          );
+          if (existingIdx >= 0) {
+            finalApplications[existingIdx] = { ...finalApplications[existingIdx], ...newApp };
+          } else {
+            finalApplications.push({
+              ...newApp,
+              sortOrder: finalApplications.length + 1
+            });
+          }
+        });
       }
+
+      await api.importBackup({
+        categories: finalCategories,
+        applications: finalApplications,
+        settings: parsed.settings
+      });
+
+      showNotification(
+        `اطلاعات با موفقیت در سیستم ثبت شد (${toPersianDigits(parsed.stats.appsCount)} برنامه${
+          parsed.stats.categoriesCount > 0 ? ` و ${toPersianDigits(parsed.stats.categoriesCount)} دسته` : ''
+        })`
+      );
+      setImportPreview(null);
+      await loadData();
     } catch (err: any) {
-      setError(err.message || 'Failed to execute test suite');
+      setError(err.message || 'خطا در ثبت اطلاعات وارد شده');
     } finally {
-      setIsRunningTests(false);
+      setIsApplyingImport(false);
     }
   };
 
+  const handleImportBackup = handleSelectJsonFile;
+
   // --- Audit Logs Handlers ---
   const handleClearAuditLogs = async () => {
-    if (!window.confirm('Are you sure you want to permanently clear all audit history and access logs?')) return;
+    if (!window.confirm('آیا از پاک‌سازی دائمی تمام گزارشات لاگ و ورودهای سیستم اطمینان دارید؟')) return;
     setIsClearingLogs(true);
     try {
       await api.clearAuditLogs();
       setAuditLogs([]);
-      showNotification('Audit logs cleared successfully');
+      showNotification('گزارشات لاگ با موفقیت پاک‌سازی شدند');
     } catch (err: any) {
-      setError(err.message || 'Failed to clear audit logs');
+      setError(err.message || 'خطا در پاک‌سازی لاگ‌ها');
     } finally {
       setIsClearingLogs(false);
     }
@@ -474,6 +1143,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       (app.dashboards && app.dashboards.includes(appDashboardFilter as any)) ||
       (appDashboardFilter === 'public' && app.isPublic) ||
       (appDashboardFilter === 'admin');
+    const matchesCategory =
+      appCategoryFilter === 'all' || app.categoryId === appCategoryFilter;
     const q = appSearch.toLowerCase().trim();
     const matchesSearch =
       !q ||
@@ -481,32 +1152,46 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       app.description.toLowerCase().includes(q) ||
       app.url.toLowerCase().includes(q) ||
       (app.tags && app.tags.some((t) => t.toLowerCase().includes(q)));
-    return matchesDashboard && matchesSearch;
+    return matchesDashboard && matchesCategory && matchesSearch;
   });
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-[#0F172A] text-slate-900 dark:text-slate-100 flex flex-col selection:bg-indigo-500 selection:text-white transition-colors duration-300">
-      {/* Top Admin Header */}
-      <header className="sticky top-0 z-30 border-b border-slate-200/80 dark:border-white/10 bg-white/80 dark:bg-slate-800/50 backdrop-blur-md px-4 sm:px-8 py-3.5 flex items-center justify-between shadow-xs">
+    <div className="min-h-screen relative text-slate-900 dark:text-slate-100 flex flex-col selection:bg-indigo-500 selection:text-white transition-colors duration-300" dir="rtl">
+      {/* 0. Dedicated Admin Background Atmosphere */}
+      <AdminConsoleBackground style={adminBgStyle} />
+
+      {/* 0.5. Top Security & Admin Mode Indicator Strip */}
+      <div className="h-1.5 w-full bg-gradient-to-r from-amber-500 via-indigo-600 to-purple-600 shadow-sm z-40 sticky top-0" />
+
+      {/* Top Admin Header - Concise, High-Utility, Clean */}
+      <header className="sticky top-1.5 z-30 border-b border-indigo-200/80 dark:border-indigo-900/50 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md px-4 sm:px-6 py-2.5 flex items-center justify-between shadow-xs">
+        {/* Right Section: Brand & Title */}
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 bg-gradient-to-br from-purple-600 to-indigo-700 rounded-xl flex items-center justify-center shadow-md shadow-purple-500/20 text-white shrink-0">
-            <LayoutDashboard className="w-5 h-5" />
-          </div>
-          <div>
-            <h1 className="text-base font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2 leading-tight">
-              <span>Admin Control Panel</span>
+          {settings?.logoUrl ? (
+            <img
+              src={settings.logoUrl}
+              alt={settings.title || 'لوگو'}
+              className="h-12 sm:h-14 md:h-16 w-auto max-w-[200px] object-contain border-0 outline-none shadow-none bg-transparent select-none transition-transform duration-200 hover:scale-105"
+              referrerPolicy="no-referrer"
+            />
+          ) : (
+            <div className="w-10 h-10 sm:w-11 sm:h-11 bg-gradient-to-br from-indigo-600 to-purple-600 rounded-2xl flex items-center justify-center shadow-xs text-white shrink-0">
+              <LayoutDashboard className="w-5 h-5 sm:w-6 sm:h-6" />
+            </div>
+          )}
+          <div className="flex flex-col justify-center">
+            <h1 className="text-sm sm:text-base font-black tracking-tight text-slate-900 dark:text-slate-100 leading-tight">
+              {settings?.title || 'هوم‌لب لینوکس'}
             </h1>
-            <p className="text-[11px] text-slate-500 dark:text-slate-400 flex items-center gap-1.5 mt-0.5">
-              <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/60 px-1.5 py-0.5 rounded-md border border-emerald-200 dark:border-emerald-800">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                Signed
+            {settings?.subtitle && (
+              <span className="text-[10px] uppercase tracking-wider text-slate-500 dark:text-slate-400 font-bold">
+                {settings.subtitle}
               </span>
-              <span>as <span className="font-semibold text-slate-700 dark:text-slate-200">{currentUser.username}</span> (Administrator)</span>
-            </p>
+            )}
           </div>
         </div>
 
-        {/* Center: 1-Click Dashboard Switcher */}
+        {/* Center: Quick Dashboard Switcher (Public / Admin) */}
         <div className="flex items-center justify-center">
           <DashboardSwitcher
             currentDashboard="admin"
@@ -517,92 +1202,174 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           />
         </div>
 
-        <div className="flex items-center gap-3">
+        {/* Left Section: Time, Themes & Compact User Profile */}
+        <div className="flex items-center gap-2 sm:gap-2.5">
+          {/* Persian Date & Live Digital Clock (Compact & Useful) */}
+          <div className="hidden lg:flex items-center gap-2 px-2.5 py-1.5 rounded-xl bg-slate-100/90 dark:bg-slate-800/80 border border-slate-200/70 dark:border-white/5 text-xs select-none">
+            <Clock className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
+            <span className="text-slate-600 dark:text-slate-300 font-medium">
+              {toPersianDigits(
+                new Date().toLocaleDateString('fa-IR', {
+                  weekday: 'short',
+                  day: 'numeric',
+                  month: 'short'
+                })
+              )}
+            </span>
+            <span className="text-slate-300 dark:text-slate-700 font-mono">|</span>
+            <AdminDigitalClock />
+          </div>
+
+          {/* Admin Background Theme Dropdown (Compact Icon Button) */}
+          <div className="relative group">
+            <button
+              type="button"
+              id="admin-bg-style-trigger"
+              className="p-2 rounded-xl text-slate-600 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 bg-slate-100/80 hover:bg-indigo-50 dark:bg-slate-800/60 dark:hover:bg-indigo-950/50 border border-slate-200/70 dark:border-white/5 transition-all cursor-pointer shadow-2xs"
+              title="تغییر تم پس‌زمینه مدیریت"
+            >
+              <Palette className="w-4 h-4" />
+            </button>
+            <div className="absolute left-0 mt-1.5 w-52 p-1.5 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50">
+              <div className="text-[10px] font-bold text-slate-400 dark:text-slate-500 px-2 py-1">
+                تم پس‌زمینه مدیریت:
+              </div>
+              {[
+                { id: 'blueprint', label: 'شبکه سرور', icon: LayoutDashboard },
+                { id: 'cyber-dark', label: 'فرماندهی تیره', icon: Server },
+                { id: 'mesh-indigo', label: 'گرادیانت فیوژن', icon: Sparkles },
+                { id: 'terminal', label: 'ترمینال مانیتورینگ', icon: Activity }
+              ].map((styleOption) => {
+                const Icon = styleOption.icon;
+                const isSelected = adminBgStyle === styleOption.id;
+                return (
+                  <button
+                    key={styleOption.id}
+                    type="button"
+                    onClick={() => handleAdminBgStyleChange(styleOption.id as AdminBgStyle)}
+                    className={`flex items-center justify-between w-full px-2.5 py-1.5 rounded-xl text-xs font-semibold transition-colors cursor-pointer ${
+                      isSelected
+                        ? 'bg-indigo-600 text-white'
+                        : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2">
+                      <Icon className="w-3.5 h-3.5" />
+                      <span>{styleOption.label}</span>
+                    </div>
+                    {isSelected && <Check className="w-3.5 h-3.5" />}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
           {/* Light / Dark Mode Toggle */}
           <ThemeToggle theme={theme} onToggle={onThemeToggle} />
 
-          <div className="hidden sm:flex items-center gap-2 px-3 py-1 rounded-lg bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-200 dark:border-indigo-800 text-indigo-700 dark:text-indigo-300 text-xs">
-            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-            <span className="font-semibold">{currentUser.username}</span>
-            <span className="text-[10px] uppercase font-mono px-1 bg-indigo-200/50 dark:bg-indigo-900/50 rounded">
-              {currentUser.role}
+          {/* Unified Compact User Profile & Logout Chip */}
+          <div className="flex items-center pl-1 pr-2.5 py-1 rounded-xl bg-slate-100/90 dark:bg-slate-800/80 border border-slate-200/80 dark:border-white/10 text-xs">
+            <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0 mr-0 ml-1.5 animate-pulse" />
+            <span className="font-bold text-slate-800 dark:text-slate-200 max-w-[90px] truncate" title={currentUser.username}>
+              {currentUser.username}
             </span>
+            <span className="text-[10px] text-slate-300 dark:text-slate-600 mx-1.5">•</span>
+            <button
+              id="admin-logout-button"
+              onClick={onLogout}
+              title="خروج از حساب"
+              className="flex items-center gap-1 px-1.5 py-0.5 rounded-lg text-[11px] font-semibold text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/60 transition-colors cursor-pointer"
+            >
+              <LogOut className="w-3 h-3" />
+              <span>خروج</span>
+            </button>
           </div>
-
-          <button
-            id="admin-logout-button"
-            onClick={onLogout}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-red-50 hover:bg-red-100 dark:bg-red-950/40 dark:hover:bg-red-900/50 text-red-600 dark:text-red-300 border border-red-200 dark:border-red-900 transition-all duration-200 hover:scale-105 active:scale-95 cursor-pointer shadow-xs"
-          >
-            <LogOut className="w-3.5 h-3.5" />
-            <span>Sign Out</span>
-          </button>
         </div>
       </header>
 
       {/* Admin Host Telemetry Bar */}
       {systemInfo && (
         <div className="max-w-7xl w-full mx-auto px-4 sm:px-8 pt-4">
-          <HostTelemetryBar systemInfo={systemInfo} />
+          <HostTelemetryBar systemInfo={systemInfo} activity={activityStats || stats?.activity} />
         </div>
       )}
 
-      {/* Main Admin Content */}
-      <div className="flex-1 flex flex-col md:flex-row max-w-7xl w-full mx-auto p-4 sm:p-8 gap-6">
-        {/* Navigation Sidebar */}
-        <aside className="w-full md:w-64 shrink-0 space-y-3">
-          <div className="p-3 rounded-2xl bg-white/70 dark:bg-slate-800/40 border border-slate-200/80 dark:border-white/10 backdrop-blur-md space-y-1 shadow-xs">
-            {[
-              { id: 'overview', label: 'Overview & Stats', icon: LayoutDashboard },
-              { id: 'applications', label: 'Applications', icon: AppWindow, count: applications.length },
-              { id: 'users', label: 'Users & Roles', icon: Users, count: users.length },
-              { id: 'appearance', label: 'Appearance & Logo', icon: Palette },
-              { id: 'logs', label: 'Audit & Access Logs', icon: ScrollText, count: auditLogs.length },
-              { id: 'system', label: 'System & Backup', icon: SettingsIcon },
-              { id: 'tests', label: 'Automated Tests', icon: ShieldAlert }
-            ].map((tab) => {
-              const Icon = tab.icon;
-              const isActive = activeTab === tab.id;
-              return (
-                <button
-                  key={tab.id}
-                  id={`admin-tab-${tab.id}`}
-                  onClick={() => setActiveTab(tab.id as AdminTab)}
-                  className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
-                    isActive
-                      ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/30'
-                      : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:text-slate-100'
-                  }`}
-                >
-                  <div className="flex items-center gap-2.5">
-                    <Icon className={`w-4 h-4 ${isActive ? 'text-white' : 'text-slate-400'}`} />
-                    <span>{tab.label}</span>
-                  </div>
-                  {tab.count !== undefined && (
-                    <span
-                      className={`text-[10px] px-1.5 py-0.5 rounded-full font-mono ${
-                        isActive
-                          ? 'bg-indigo-700 text-white'
-                          : 'bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
-                      }`}
-                    >
-                      {tab.count}
-                    </span>
-                  )}
-                </button>
-              );
-            })}
-          </div>
+      {/* Main Admin Content with Vertical Sidebar on the Right */}
+      <div className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-8 py-4 flex flex-col lg:flex-row gap-6 items-start">
+        {/* 1. Vertical Sidebar on the Right (First child in RTL) */}
+        <aside className="w-full lg:w-64 shrink-0 lg:sticky lg:top-20 z-20">
+          <div className="p-3 rounded-2xl bg-white/80 dark:bg-slate-900/80 border border-slate-200/80 dark:border-white/10 backdrop-blur-xl shadow-xs space-y-2">
+            <div className="px-2 py-1 text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider flex items-center justify-between">
+              <span>منوی مدیریت</span>
+              <span className="text-[10px] font-mono bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 px-1.5 py-0.5 rounded">
+                ۷ بخش
+              </span>
+            </div>
 
-          {/* Quick Info Box */}
-          <div className="p-4 rounded-2xl bg-white/40 dark:bg-slate-900/40 border border-slate-200/60 dark:border-white/5 text-xs text-slate-500 dark:text-slate-400 space-y-1">
-            <p className="font-semibold text-slate-700 dark:text-slate-300">Linux Dash Command Center</p>
-            <p className="text-[11px]">Config Version: <span className="font-mono">{settings?.configVersion?.slice(0, 8) || 'v1.0.0'}</span></p>
+            <nav className="grid grid-cols-2 sm:grid-cols-3 lg:flex lg:flex-col gap-1.5" dir="rtl">
+              {[
+                { id: 'overview', label: 'نمای کلی و آمار', icon: LayoutDashboard },
+                { id: 'applications', label: 'برنامه‌ها و دکمه‌ها', icon: AppWindow, count: applications.length },
+                { id: 'categories', label: 'دسته‌بندی‌ها و اولویت', icon: Folder, count: categories.length },
+                { id: 'users', label: 'کاربران و دسترسی‌ها', icon: Users, count: users.length },
+                { id: 'appearance', label: 'ظاهر، والپیپر و لوگو', icon: Palette },
+                { id: 'logs', label: 'گزارش وقایع و لاگ‌ها', icon: ScrollText, count: auditLogs.length },
+                { id: 'system', label: 'پشتیبان‌گیری و داکر', icon: SettingsIcon }
+              ].map((tab) => {
+                const Icon = tab.icon;
+                const isActive = activeTab === tab.id;
+                return (
+                  <button
+                    key={tab.id}
+                    id={`admin-tab-${tab.id}`}
+                    onClick={() => setActiveTab(tab.id as AdminTab)}
+                    className={`flex items-center justify-between w-full px-3 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                      isActive
+                        ? 'bg-gradient-to-r from-indigo-600 to-blue-600 text-white shadow-md shadow-indigo-500/25 ring-2 ring-indigo-400/30'
+                        : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:text-slate-100'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2.5 truncate">
+                      <Icon className={`w-4 h-4 shrink-0 ${isActive ? 'text-white' : 'text-slate-400'}`} />
+                      <span className="truncate">{tab.label}</span>
+                    </div>
+                    {tab.count !== undefined && (
+                      <span
+                        className={`text-[10px] px-1.5 py-0.5 rounded-full font-mono shrink-0 mr-1.5 ${
+                          isActive
+                            ? 'bg-white/20 text-white'
+                            : 'bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
+                        }`}
+                      >
+                        {toPersianDigits(tab.count)}
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </nav>
+
+            {/* Divider and Quick link to Public Homepage */}
+            <div className="pt-2 border-t border-slate-200/80 dark:border-white/10">
+              <button
+                type="button"
+                id="admin-nav-to-public-btn"
+                onClick={onNavigateHome}
+                title="مشاهده و بازگشت به صفحه عمومی"
+                className="flex items-center justify-between w-full px-3 py-2.5 rounded-xl text-xs font-bold text-blue-600 dark:text-blue-400 bg-blue-50/70 hover:bg-blue-100 dark:bg-blue-950/40 dark:hover:bg-blue-900/50 border border-blue-200/60 dark:border-blue-800/60 transition-all cursor-pointer"
+              >
+                <div className="flex items-center gap-2">
+                  <Globe className="w-4 h-4 text-blue-500 shrink-0" />
+                  <span>صفحه عمومی هوم‌لب</span>
+                </div>
+                <ChevronRight className="w-3.5 h-3.5 rtl:rotate-180 opacity-70 shrink-0" />
+              </button>
+            </div>
           </div>
         </aside>
 
-        {/* Tab Body */}
-        <main className="flex-1 min-w-0">
+        {/* 2. Main Admin Content Area (Left side in RTL) */}
+        <main className="flex-1 min-w-0 w-full">
           {/* Notifications */}
           {error && (
             <div className="mb-4 p-4 rounded-2xl bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800 text-red-600 dark:text-red-300 text-xs flex items-center justify-between">
@@ -629,49 +1396,77 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           {activeTab === 'overview' && (
             <div className="space-y-6">
               {/* Stat Cards Grid */}
-              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                <div className="p-4.5 rounded-2xl bg-white/80 dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800 shadow-xs">
-                  <span className="text-xs font-medium text-slate-500 dark:text-slate-400">Total Buttons</span>
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
+                <div className="p-4 rounded-2xl bg-white/80 dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800 shadow-xs">
+                  <span className="text-xs font-medium text-slate-500 dark:text-slate-400">کل دکمه‌ها</span>
                   <div className="mt-2 flex items-baseline justify-between">
-                    <span className="text-2xl font-black text-slate-900 dark:text-slate-100">
-                      {applications.length}
+                    <span className="text-2xl font-black text-slate-900 dark:text-slate-100 font-mono">
+                      {toPersianDigits(applications.length)}
                     </span>
                     <span className="text-xs text-emerald-600 dark:text-emerald-400 font-medium">
-                      {applications.filter(a => a.isEnabled !== false).length} active
+                      {toPersianDigits(applications.filter(a => a.isEnabled !== false).length)} فعال
                     </span>
                   </div>
                 </div>
 
-                <div className="p-4.5 rounded-2xl bg-white/80 dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800 shadow-xs">
-                  <span className="text-xs font-medium text-slate-500 dark:text-slate-400">Grid Layout</span>
+                <div className="p-4 rounded-2xl bg-white/80 dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800 shadow-xs">
+                  <span className="text-xs font-medium text-slate-500 dark:text-slate-400">دسته‌بندی‌ها</span>
                   <div className="mt-2 flex items-baseline justify-between">
-                    <span className="text-2xl font-black text-blue-600 dark:text-blue-400">
-                      {settings.gridColumns || 4}
+                    <span className="text-2xl font-black text-purple-600 dark:text-purple-400 font-mono">
+                      {toPersianDigits(categories.length)}
                     </span>
-                    <span className="text-xs text-slate-400">Desktop Columns</span>
+                    <button
+                      onClick={() => setActiveTab('categories')}
+                      className="text-xs text-purple-600 dark:text-purple-400 hover:underline cursor-pointer"
+                    >
+                      مدیریت اولویت
+                    </button>
                   </div>
                 </div>
 
-                <div className="p-4.5 rounded-2xl bg-white/80 dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800 shadow-xs">
-                  <span className="text-xs font-medium text-slate-500 dark:text-slate-400">Uploaded Wallpapers</span>
+                <div className="p-4 rounded-2xl bg-white/80 dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800 shadow-xs">
+                  <span className="text-xs font-medium text-slate-500 dark:text-slate-400">کاربران فعال</span>
                   <div className="mt-2 flex items-baseline justify-between">
-                    <span className="text-2xl font-black text-indigo-600 dark:text-indigo-400">
-                      {settings.uploadedBackgrounds?.length || 0} / 10
+                    <span className="text-2xl font-black text-emerald-600 dark:text-emerald-400 font-mono">
+                      {toPersianDigits(activityStats?.activeUsers || stats?.activity?.activeUsers || 1)}
                     </span>
-                    <span className="text-xs text-slate-400">Server slots</span>
+                    <span className="text-xs text-emerald-500 font-medium">فعال</span>
                   </div>
                 </div>
 
-                <div className="p-4.5 rounded-2xl bg-white/80 dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800 shadow-xs">
-                  <span className="text-xs font-medium text-slate-500 dark:text-slate-400">Admin Accounts</span>
+                <div className="p-4 rounded-2xl bg-white/80 dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800 shadow-xs">
+                  <span className="text-xs font-medium text-slate-500 dark:text-slate-400">بازدیدهای امروز</span>
                   <div className="mt-2 flex items-baseline justify-between">
-                    <span className="text-2xl font-black text-slate-900 dark:text-slate-100">
-                      {users.length}
+                    <span className="text-2xl font-black text-cyan-600 dark:text-cyan-400 font-mono">
+                      {toPersianDigits(activityStats?.todayVisits || stats?.activity?.todayVisits || 0)}
                     </span>
-                    <span className="text-xs text-slate-400">Administrators</span>
+                    <span className="text-xs text-slate-400">کلیک و بازدید</span>
+                  </div>
+                </div>
+
+                <div className="p-4 rounded-2xl bg-white/80 dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800 shadow-xs">
+                  <span className="text-xs font-medium text-slate-500 dark:text-slate-400">والپیپرها</span>
+                  <div className="mt-2 flex items-baseline justify-between">
+                    <span className="text-2xl font-black text-indigo-600 dark:text-indigo-400 font-mono">
+                      {toPersianDigits(settings.uploadedBackgrounds?.length || 0)} / {toPersianDigits(10)}
+                    </span>
+                    <span className="text-xs text-slate-400">آپلود شده</span>
+                  </div>
+                </div>
+
+                <div className="p-4 rounded-2xl bg-white/80 dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800 shadow-xs">
+                  <span className="text-xs font-medium text-slate-500 dark:text-slate-400">حساب‌ها</span>
+                  <div className="mt-2 flex items-baseline justify-between">
+                    <span className="text-2xl font-black text-slate-900 dark:text-slate-100 font-mono">
+                      {toPersianDigits(users.length)}
+                    </span>
+                    <span className="text-xs text-slate-400">کاربر</span>
                   </div>
                 </div>
               </div>
+
+              {/* Real-time Telemetry Dashboard: Active Sessions, Top 3 Used Apps & Daily Visits */}
+              <TelemetryDashboard mode="admin" systemInfo={systemInfo} applications={applications} />
 
               {/* System Telemetry & Quick Actions */}
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -680,40 +1475,40 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
                     <div className="flex items-center gap-2 font-bold text-sm text-slate-900 dark:text-slate-100">
                       <Activity className="w-4 h-4 text-blue-500" />
-                      <span>Host Environment & Runtime</span>
+                      <span>محیط و زمان اجرای هاست</span>
                     </div>
                     <span className="px-2 py-0.5 rounded-full text-[10px] font-mono bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300">
-                      Operational
+                      فعال و در حال اجرا
                     </span>
                   </div>
 
                   <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-xs">
                     <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200/60 dark:border-slate-800/60">
-                      <span className="text-slate-400">Node Runtime</span>
+                      <span className="text-slate-400">نسخه نود (Node)</span>
                       <p className="font-mono font-bold text-slate-800 dark:text-slate-200 mt-1">
                         {systemInfo?.nodeVersion || 'v22.x'}
                       </p>
                     </div>
                     <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200/60 dark:border-slate-800/60">
-                      <span className="text-slate-400">Platform Arch</span>
+                      <span className="text-slate-400">پلتفرم و معماری</span>
                       <p className="font-mono font-bold text-slate-800 dark:text-slate-200 mt-1">
                         {systemInfo?.platform} ({systemInfo?.arch})
                       </p>
                     </div>
                     <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200/60 dark:border-slate-800/60">
-                      <span className="text-slate-400">Heap Memory</span>
+                      <span className="text-slate-400">حافظه Heap مصرفی</span>
                       <p className="font-mono font-bold text-slate-800 dark:text-slate-200 mt-1">
-                        {systemInfo?.heapUsedMB || 0} MB
+                        {systemInfo?.heapUsedMB || 0} مگابایت
                       </p>
                     </div>
                     <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200/60 dark:border-slate-800/60">
-                      <span className="text-slate-400">Process Uptime</span>
+                      <span className="text-slate-400">زمان فعالیت پردازه</span>
                       <p className="font-mono font-bold text-slate-800 dark:text-slate-200 mt-1">
-                        {Math.floor((systemInfo?.uptimeSeconds || 0) / 60)} mins
+                        {Math.floor((systemInfo?.uptimeSeconds || 0) / 60)} دقیقه
                       </p>
                     </div>
                     <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200/60 dark:border-slate-800/60 sm:col-span-2">
-                      <span className="text-slate-400">Persistence Target</span>
+                      <span className="text-slate-400">مسیر ذخیره‌سازی داده‌ها</span>
                       <p className="font-mono font-bold text-slate-800 dark:text-slate-200 mt-1 truncate">
                         ./data/database.json
                       </p>
@@ -723,7 +1518,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
                 {/* Quick Actions Panel */}
                 <div className="p-5 rounded-2xl bg-white/80 dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800 shadow-xs space-y-3">
-                  <h3 className="font-bold text-sm text-slate-900 dark:text-slate-100">Quick Actions</h3>
+                  <h3 className="font-bold text-sm text-slate-900 dark:text-slate-100">دسترسی‌های سریع</h3>
                   <button
                     onClick={() => {
                       setEditingApp({
@@ -745,34 +1540,43 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   >
                     <span className="flex items-center gap-2">
                       <Plus className="w-4 h-4" />
-                      Add Application
+                      افزودن برنامه جدید
                     </span>
-                    <ChevronRight className="w-3.5 h-3.5" />
+                    <ChevronRight className="w-3.5 h-3.5 rotate-180" />
                   </button>
 
                   <button
-                    onClick={() => {
-                      setActiveTab('tests');
-                      handleRunTests();
-                    }}
+                    onClick={handleExportExcel}
                     className="w-full flex items-center justify-between p-2.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/50 dark:hover:bg-emerald-900/60 text-emerald-700 dark:text-emerald-300 text-xs font-semibold transition-colors cursor-pointer"
                   >
                     <span className="flex items-center gap-2">
-                      <ShieldAlert className="w-4 h-4 text-emerald-500" />
-                      Run Security Tests
+                      <FileSpreadsheet className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                      خروجی اکسل (.xlsx)
                     </span>
-                    <ChevronRight className="w-3.5 h-3.5" />
+                    <ChevronRight className="w-3.5 h-3.5 rotate-180" />
                   </button>
 
                   <button
-                    onClick={handleExportBackup}
+                    onClick={handleExportJson}
                     className="w-full flex items-center justify-between p-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-semibold transition-colors cursor-pointer"
                   >
                     <span className="flex items-center gap-2">
-                      <Download className="w-4 h-4 text-purple-500" />
-                      Export JSON Backup
+                      <FileJson className="w-4 h-4 text-purple-500" />
+                      خروجی پشتیبان JSON
                     </span>
-                    <ChevronRight className="w-3.5 h-3.5" />
+                    <ChevronRight className="w-3.5 h-3.5 rotate-180" />
+                  </button>
+
+                  <button
+                    onClick={handleCreateZipBackup}
+                    disabled={isCreatingBackup}
+                    className="w-full flex items-center justify-between p-2.5 rounded-xl bg-purple-50 hover:bg-purple-100 dark:bg-purple-950/50 dark:hover:bg-purple-900/60 text-purple-700 dark:text-purple-300 text-xs font-semibold transition-colors cursor-pointer disabled:opacity-50"
+                  >
+                    <span className="flex items-center gap-2">
+                      <Archive className="w-4 h-4 text-purple-500" />
+                      {isCreatingBackup ? 'در حال ایجاد نسخه پشتیبان...' : 'تهیه نسخه پشتیبان کامل ZIP'}
+                    </span>
+                    <ChevronRight className="w-3.5 h-3.5 rotate-180" />
                   </button>
                 </div>
               </div>
@@ -782,24 +1586,24 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 <div className="flex items-center justify-between">
                   <h3 className="font-bold text-sm text-slate-900 dark:text-slate-100 flex items-center gap-2">
                     <Clock className="w-4 h-4 text-slate-400" />
-                    <span>Recent Activity & Audit Trail</span>
+                    <span>فعالیت‌های اخیر و گزارشات ورود</span>
                   </h3>
                   <button
                     onClick={() => setActiveTab('logs')}
                     className="text-xs text-indigo-600 dark:text-indigo-400 hover:underline font-semibold flex items-center gap-1 cursor-pointer"
                   >
-                    <span>View Full Log Viewer</span>
-                    <ChevronRight className="w-3 h-3" />
+                    <span>مشاهده کامل لاگ‌ها</span>
+                    <ChevronRight className="w-3 h-3 rotate-180" />
                   </button>
                 </div>
                 <div className="overflow-x-auto max-h-60 overflow-y-auto">
-                  <table className="w-full text-left text-xs">
+                  <table className="w-full text-right text-xs">
                     <thead>
                       <tr className="border-b border-slate-200 dark:border-slate-800 text-slate-400">
-                        <th className="pb-2 font-medium">Timestamp</th>
-                        <th className="pb-2 font-medium">User</th>
-                        <th className="pb-2 font-medium">Action</th>
-                        <th className="pb-2 font-medium">Details</th>
+                        <th className="pb-2 font-medium">زمان ثبت</th>
+                        <th className="pb-2 font-medium">کاربر</th>
+                        <th className="pb-2 font-medium">عملیات</th>
+                        <th className="pb-2 font-medium">جزئیات</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 font-mono">
@@ -823,15 +1627,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 <div className="flex items-center justify-between pb-2 border-b border-slate-100 dark:border-slate-800">
                   <div className="flex items-center gap-2 font-bold text-sm text-slate-900 dark:text-slate-100">
                     <AppWindow className="w-4 h-4 text-indigo-500" />
-                    <span>Live Applications Directory & Launchers</span>
-                    <span className="text-xs text-slate-400 font-normal">({applications.length} Total)</span>
+                    <span>فهرست سریع اجرای برنامه‌ها</span>
+                    <span className="text-xs text-slate-400 font-normal">({applications.length} کل)</span>
                   </div>
                   <button
                     onClick={() => setActiveTab('applications')}
                     className="text-xs text-indigo-600 dark:text-indigo-400 hover:underline font-semibold flex items-center gap-1 cursor-pointer"
                   >
-                    <span>Manage All</span>
-                    <ChevronRight className="w-3 h-3" />
+                    <span>مدیریت همه برنامه‌ها</span>
+                    <ChevronRight className="w-3 h-3 rotate-180" />
                   </button>
                 </div>
 
@@ -850,7 +1654,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         </div>
                         <div className="min-w-0">
                           <h4 className="text-xs font-bold text-slate-900 dark:text-slate-100 truncate">{app.name}</h4>
-                          <p className="text-[10px] text-slate-400 truncate">{app.url}</p>
+                          <p className="text-[10px] text-slate-400 truncate dir-ltr text-right">{app.url}</p>
                         </div>
                       </div>
                       <a
@@ -858,7 +1662,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         target={app.openInNewTab ? '_blank' : '_self'}
                         rel="noreferrer"
                         className="p-1.5 rounded-lg text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-white dark:hover:bg-slate-800 shrink-0 transition-colors"
-                        title="Launch Application"
+                        title="اجرای برنامه"
                       >
                         <ExternalLink className="w-3.5 h-3.5" />
                       </a>
@@ -872,160 +1676,683 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           {/* 2. APPLICATIONS TAB */}
           {activeTab === 'applications' && (
             <div className="space-y-4">
-              {/* Header bar with filters and Add Button */}
-              <div className="flex flex-col sm:flex-row gap-3 items-center justify-between p-4 rounded-2xl bg-white/80 dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800 shadow-xs">
-                <div className="flex items-center gap-3 w-full sm:w-auto">
-                  <div className="relative flex-1 sm:w-64">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                    <input
-                      type="text"
-                      placeholder="Filter applications..."
-                      value={appSearch}
-                      onChange={(e) => setAppSearch(e.target.value)}
-                      className="w-full pl-9 pr-3 py-1.5 rounded-xl text-xs bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    />
+              {/* Header bar with filters, view mode and Action Buttons */}
+              <div className="p-4 rounded-2xl bg-white/80 dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800 shadow-xs space-y-3">
+                <div className="flex flex-col lg:flex-row gap-3 items-stretch lg:items-center justify-between">
+                  {/* Search and Filters */}
+                  <div className="flex flex-wrap items-center gap-2.5 flex-1">
+                    <div className="relative flex-1 min-w-[200px] max-w-md">
+                      <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                      <input
+                        type="text"
+                        placeholder="جستجو در نام، آدرس یا توضیحات دکمه..."
+                        value={appSearch}
+                        onChange={(e) => setAppSearch(e.target.value)}
+                        className="w-full pr-9 pl-3 py-2 rounded-xl text-xs bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                      />
+                    </div>
+
+                    <select
+                      id="app-category-filter"
+                      value={appCategoryFilter}
+                      onChange={(e) => setAppCategoryFilter(e.target.value)}
+                      className="py-2 px-3 rounded-xl text-xs bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer"
+                    >
+                      <option value="all">همه دسته‌بندی‌ها ({applications.length})</option>
+                      {categories.map((cat) => {
+                        const count = applications.filter((a) => a.categoryId === cat.id).length;
+                        return (
+                          <option key={cat.id} value={cat.id}>
+                            {cat.name} ({count})
+                          </option>
+                        );
+                      })}
+                    </select>
+
+                    <select
+                      id="app-dashboard-filter"
+                      value={appDashboardFilter}
+                      onChange={(e) => setAppDashboardFilter(e.target.value as any)}
+                      className="py-2 px-3 rounded-xl text-xs bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer"
+                    >
+                      <option value="all">همه داشبوردها</option>
+                      <option value="public">صفحه اصلی عمومی</option>
+                      <option value="it_staff">پورتال همکاران IT</option>
+                      <option value="admin">کنترل‌پنل مدیریت</option>
+                    </select>
+
+                    {/* View Mode Toggle */}
+                    <div className="flex items-center p-1 rounded-xl bg-slate-100 dark:bg-slate-950 border border-slate-200 dark:border-slate-800">
+                      <button
+                        type="button"
+                        onClick={() => setAppsViewMode('cards')}
+                        className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                          appsViewMode === 'cards'
+                            ? 'bg-white dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 shadow-xs'
+                            : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+                        }`}
+                        title="نمای کارت‌های تفصیلی و بزرگ"
+                      >
+                        <LayoutGrid className="w-3.5 h-3.5" />
+                        <span>کارت‌ها</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setAppsViewMode('table')}
+                        className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                          appsViewMode === 'table'
+                            ? 'bg-white dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 shadow-xs'
+                            : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+                        }`}
+                        title="نمای جدول داده‌ای پیشرفته"
+                      >
+                        <List className="w-3.5 h-3.5" />
+                        <span>جدول</span>
+                      </button>
+                    </div>
                   </div>
 
-                  <select
-                    id="app-dashboard-filter"
-                    value={appDashboardFilter}
-                    onChange={(e) => setAppDashboardFilter(e.target.value as any)}
-                    className="py-1.5 px-3 rounded-xl text-xs bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  >
-                    <option value="all">All Dashboards</option>
-                    <option value="public">Public Homepage</option>
-                    <option value="it_staff">IT Staff Portal</option>
-                    <option value="admin">Admin Panel</option>
-                  </select>
+                  {/* Top Action Buttons */}
+                  <div className="flex flex-wrap items-center gap-2">
+                    <input
+                      type="file"
+                      ref={quickPdfInputRef}
+                      onChange={handleQuickCreatePdfApp}
+                      accept=".pdf,application/pdf"
+                      className="hidden"
+                      id="admin-quick-pdf-upload-input"
+                    />
+
+                    <button
+                      type="button"
+                      onClick={() => quickPdfInputRef.current?.click()}
+                      disabled={isQuickUploadingPdf}
+                      className="flex-1 sm:flex-initial px-3.5 py-2 rounded-xl text-xs font-bold bg-rose-600 hover:bg-rose-700 text-white shadow-xs flex items-center justify-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50"
+                      title="آپلود مستقیم یک فایل PDF در سرور و ایجاد خودکار دکمه برای آن"
+                    >
+                      <FileText className={`w-4 h-4 ${isQuickUploadingPdf ? 'animate-bounce' : ''}`} />
+                      <span>{isQuickUploadingPdf ? 'در حال ایجاد...' : 'آپلود سریع دکمه PDF'}</span>
+                    </button>
+
+                    <button
+                      onClick={handleOpenServerDocsModal}
+                      className="flex-1 sm:flex-initial px-3.5 py-2 rounded-xl text-xs font-bold bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                      title="مشاهده، آپلود و مدیریت فایل‌ها و اسناد PDF روی سرور"
+                    >
+                      <Folder className="w-4 h-4 text-amber-500" />
+                      <span>اسناد و فایل‌های سرور</span>
+                    </button>
+
+                    <button
+                      id="add-application-button"
+                      onClick={() => openAppEditModal()}
+                      className="flex-1 sm:flex-initial px-4 py-2 rounded-xl text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white shadow-sm flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                    >
+                      <Plus className="w-4 h-4" />
+                      <span>افزودن دکمه جدید</span>
+                    </button>
+                  </div>
                 </div>
 
+                {/* Subtitle / summary info */}
+                <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-100 dark:border-slate-800 text-[11px] text-slate-500 dark:text-slate-400">
+                  <div className="flex items-center gap-3">
+                    <span>تعداد دکمه‌های نمایش‌داده‌شده: <strong className="font-mono text-slate-800 dark:text-slate-200">{toPersianDigits(filteredApps.length)}</strong> از <strong className="font-mono text-slate-800 dark:text-slate-200">{toPersianDigits(applications.length)}</strong></span>
+                    <span>•</span>
+                    <span>فعال در پرتال: <strong className="font-mono text-emerald-600 dark:text-emerald-400">{toPersianDigits(applications.filter(a => a.isEnabled).length)}</strong></span>
+                    <span>•</span>
+                    <span>اسناد PDF سرور: <strong className="font-mono text-rose-600 dark:text-rose-400">{toPersianDigits(applications.filter(a => a.fileUrl || a.url.toLowerCase().endsWith('.pdf') || a.url.includes('/uploads/documents/')).length)}</strong></span>
+                  </div>
+                  <span className="text-[10px] text-slate-400">نکته: برای جابجایی ترتیب دکمه‌ها از فلش‌های بالا/پایین استفاده کنید.</span>
+                </div>
+              </div>
+
+              {/* No items found */}
+              {filteredApps.length === 0 && (
+                <div className="p-12 text-center rounded-2xl bg-white/80 dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800">
+                  <AppWindow className="w-12 h-12 mx-auto text-slate-300 dark:text-slate-600 mb-3" />
+                  <h4 className="font-bold text-sm text-slate-700 dark:text-slate-300">هیچ برنامه‌ای یافت نشد</h4>
+                  <p className="text-xs text-slate-400 mt-1">با فیلترها یا عبارت جستجوی فعلی موردی پیدا نشد.</p>
+                </div>
+              )}
+
+              {/* VIEW MODE 1: DETAILED CARDS GRID */}
+              {appsViewMode === 'cards' && filteredApps.length > 0 && (
+                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4.5">
+                  {filteredApps.map((app, idx) => {
+                    const appCategory = categories.find((c) => c.id === app.categoryId);
+                    const isPdf = !!app.fileUrl || app.url.toLowerCase().endsWith('.pdf') || app.url.includes('/uploads/documents/');
+                    const isUnc = app.url.startsWith('\\\\') || app.url.startsWith('//') || app.url.toLowerCase().startsWith('smb://');
+                    const targetDest = app.fileUrl || app.url;
+
+                    return (
+                      <div
+                        key={app.id}
+                        className="rounded-2xl bg-white/90 dark:bg-slate-900/90 border border-slate-200/80 dark:border-slate-800/80 hover:border-indigo-300 dark:hover:border-indigo-500/50 shadow-xs hover:shadow-md transition-all flex flex-col justify-between overflow-hidden group"
+                        style={{ borderTop: `3px solid ${app.accentColor || '#6366F1'}` }}
+                      >
+                        <div className="p-4 space-y-3.5 flex-1">
+                          {/* Card Top: Icon, Title, Category & Sort */}
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="flex items-center gap-3 min-w-0">
+                              <div
+                                className="w-11 h-11 rounded-xl bg-slate-50 dark:bg-slate-800/80 flex items-center justify-center border shrink-0 p-2 shadow-xs group-hover:scale-105 transition-transform"
+                                style={{ borderColor: `${app.accentColor || '#6366F1'}60` }}
+                              >
+                                <AppIcon icon={app.icon} accentColor={app.accentColor || '#6366F1'} className="w-6 h-6" />
+                              </div>
+                              <div className="min-w-0">
+                                <h4 className="font-bold text-sm text-slate-900 dark:text-slate-100 truncate" title={app.name}>
+                                  {app.name}
+                                </h4>
+                                <div className="flex items-center gap-1.5 mt-0.5">
+                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-medium bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200/60 dark:border-slate-700/60">
+                                    <Folder className="w-2.5 h-2.5 text-slate-400" />
+                                    <span>{appCategory ? appCategory.name : 'عمومی'}</span>
+                                  </span>
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Sort Order Badges & Buttons */}
+                            <div className="flex items-center gap-1 bg-slate-50 dark:bg-slate-800/50 p-1 rounded-xl border border-slate-100 dark:border-slate-800 shrink-0">
+                              <button
+                                disabled={idx === 0}
+                                onClick={() => handleMoveApp(idx, 'up')}
+                                className="p-1 rounded hover:bg-slate-200 dark:hover:bg-slate-700 disabled:opacity-20 cursor-pointer transition-colors"
+                                title="انتقال به بالا"
+                              >
+                                <ArrowUp className="w-3 h-3" />
+                              </button>
+                              <span className="font-mono text-[10px] font-bold text-indigo-600 dark:text-indigo-400 px-1">
+                                #{app.sortOrder}
+                              </span>
+                              <button
+                                disabled={idx === filteredApps.length - 1}
+                                onClick={() => handleMoveApp(idx, 'down')}
+                                className="p-1 rounded hover:bg-slate-200 dark:hover:bg-slate-700 disabled:opacity-20 cursor-pointer transition-colors"
+                                title="انتقال به پایین"
+                              >
+                                <ArrowDown className="w-3 h-3" />
+                              </button>
+                            </div>
+                          </div>
+
+                          {/* Destination / Target Box */}
+                          <div className={`p-2.5 rounded-xl border text-xs space-y-1.5 ${
+                            isPdf
+                              ? 'bg-rose-50/70 dark:bg-rose-950/30 border-rose-200/80 dark:border-rose-900/50 text-rose-900 dark:text-rose-200'
+                              : isUnc
+                              ? 'bg-indigo-50/70 dark:bg-indigo-950/30 border-indigo-200/80 dark:border-indigo-900/50 text-indigo-900 dark:text-indigo-200'
+                              : 'bg-slate-50 dark:bg-slate-950/60 border-slate-200/80 dark:border-slate-800 text-slate-800 dark:text-slate-200'
+                          }`}>
+                            <div className="flex items-center justify-between gap-1">
+                              <span className="inline-flex items-center gap-1 font-semibold text-[10px]">
+                                {isPdf ? (
+                                  <>
+                                    <FileText className="w-3 h-3 text-rose-500" />
+                                    <span>سند اختصاصی PDF سرور</span>
+                                  </>
+                                ) : isUnc ? (
+                                  <>
+                                    <HardDrive className="w-3 h-3 text-indigo-500" />
+                                    <span>مسیر اشتراک شبکه داخلی (SMB / UNC)</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <Globe className="w-3 h-3 text-blue-500" />
+                                    <span>آدرس وب ({app.url.startsWith('https://') ? 'HTTPS امن' : 'HTTP'})</span>
+                                  </>
+                                )}
+                              </span>
+
+                              <span className="text-[10px] text-slate-400 dark:text-slate-500">
+                                {app.openInNewTab ? '↗ باز شدن در زبانه جدید' : '→ باز شدن در همین زبانه'}
+                              </span>
+                            </div>
+
+                            <div className="flex items-center justify-between gap-2 font-mono text-[11px] dir-ltr text-left overflow-hidden bg-white/60 dark:bg-slate-900/60 p-1.5 rounded-lg border border-slate-200/50 dark:border-white/5">
+                              <span className="truncate flex-1 select-all" title={targetDest}>
+                                {targetDest}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={(e) => handleCopyAppUrl(app, e)}
+                                className="p-1 rounded text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors shrink-0 cursor-pointer"
+                                title="کپی کردن آدرس یا مسیر مقصد"
+                              >
+                                {copiedAppId === app.id ? (
+                                  <Check className="w-3 h-3 text-emerald-500" />
+                                ) : (
+                                  <Copy className="w-3 h-3" />
+                                )}
+                              </button>
+                            </div>
+                          </div>
+
+                          {/* Description Section */}
+                          <div className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed bg-slate-50/50 dark:bg-slate-800/30 p-2.5 rounded-xl border border-slate-100 dark:border-white/5 min-h-[44px]">
+                            {app.description ? (
+                              <p className="line-clamp-2">{app.description}</p>
+                            ) : (
+                              <span className="text-slate-400 italic text-[11px]">بدون توضیحات ثبت‌شده</span>
+                            )}
+                          </div>
+
+                          {/* Metadata Grid (Dashboards, Tags, Accent Color) */}
+                          <div className="space-y-2 pt-1">
+                            {/* Dashboards Badges */}
+                            <div className="flex items-center justify-between gap-2 text-[11px]">
+                              <span className="text-slate-400 text-[10px]">داشبوردها:</span>
+                              <div className="flex flex-wrap gap-1 justify-end">
+                                {(!app.dashboards || app.dashboards.includes('public') || app.isPublic) && (
+                                  <span className="px-1.5 py-0.5 rounded bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300 border border-blue-200/50 dark:border-blue-900/50 text-[10px] font-medium">
+                                    صفحه عمومی
+                                  </span>
+                                )}
+                                {app.dashboards && app.dashboards.includes('it_staff') && (
+                                  <span className="px-1.5 py-0.5 rounded bg-purple-50 dark:bg-purple-950/50 text-purple-700 dark:text-purple-300 border border-purple-200/50 dark:border-purple-900/50 text-[10px] font-medium">
+                                    پورتال IT
+                                  </span>
+                                )}
+                                {app.dashboards && app.dashboards.includes('admin') && (
+                                  <span className="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200/50 dark:border-slate-700/50 text-[10px] font-medium">
+                                    مدیریت
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+
+                            {/* Accent Color Dot & Code */}
+                            <div className="flex items-center justify-between gap-2 text-[11px]">
+                              <span className="text-slate-400 text-[10px]">رنگ دکمه:</span>
+                              <div className="flex items-center gap-1.5 font-mono text-[10px] text-slate-500">
+                                <span
+                                  className="w-3 h-3 rounded-full border border-black/10 dark:border-white/10 shadow-xs"
+                                  style={{ backgroundColor: app.accentColor || '#3B82F6' }}
+                                />
+                                <span>{app.accentColor || '#3B82F6'}</span>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Card Bottom / Action Bar */}
+                        <div className="p-3 bg-slate-50/80 dark:bg-slate-950/60 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-between gap-2">
+                          {/* Status Visibility Switch */}
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              await api.updateApplication(app.id, { isEnabled: !app.isEnabled });
+                              loadData();
+                            }}
+                            className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-semibold cursor-pointer transition-all ${
+                              app.isEnabled
+                                ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30 hover:bg-emerald-500/25'
+                                : 'bg-slate-200/80 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border border-slate-300 dark:border-slate-700 hover:bg-slate-300 dark:hover:bg-slate-700'
+                            }`}
+                            title="کلیک برای فعال یا مخفی کردن این دکمه در پورتال"
+                          >
+                            {app.isEnabled ? (
+                              <>
+                                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                                <span className="text-[11px]">فعال (نمایش)</span>
+                              </>
+                            ) : (
+                              <>
+                                <EyeOff className="w-3 h-3 text-slate-400" />
+                                <span className="text-[11px]">غیرفعال (مخفی)</span>
+                              </>
+                            )}
+                          </button>
+
+                          {/* Operations: Launch, Copy, Edit, Delete */}
+                          <div className="flex items-center gap-1">
+                            <a
+                              href={targetDest}
+                              target={app.openInNewTab ? '_blank' : '_self'}
+                              rel="noreferrer"
+                              className="p-1.5 rounded-lg text-slate-500 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-white dark:hover:bg-slate-800 border border-slate-200/50 dark:border-slate-700/50 shadow-xs transition-colors"
+                              title="تست و اجرای مستقیم این برنامه / فایل"
+                            >
+                              <ExternalLink className="w-3.5 h-3.5" />
+                            </a>
+
+                            <button
+                              onClick={() => openAppEditModal(app)}
+                              className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/40 dark:hover:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300 border border-indigo-200/60 dark:border-indigo-800/60 text-xs font-semibold cursor-pointer transition-colors shadow-xs"
+                              title="ویرایش دکمه"
+                            >
+                              <Edit2 className="w-3.5 h-3.5" />
+                              <span>ویرایش</span>
+                            </button>
+
+                            <button
+                              onClick={() => handleDeleteApp(app.id, app.name)}
+                              className="p-1.5 rounded-lg text-red-500 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/40 border border-red-200/40 dark:border-red-900/40 cursor-pointer transition-colors shadow-xs"
+                              title="حذف کامل این برنامه"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              {/* VIEW MODE 2: ENRICHED ADVANCED DATA TABLE */}
+              {appsViewMode === 'table' && filteredApps.length > 0 && (
+                <div className="rounded-2xl bg-white/80 dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800 shadow-xs overflow-hidden">
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-right text-xs">
+                      <thead className="bg-slate-50 dark:bg-slate-950/60 border-b border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400">
+                        <tr>
+                          <th className="p-3.5 font-medium whitespace-nowrap">ترتیب</th>
+                          <th className="p-3.5 font-medium whitespace-nowrap">نام، آیکون و دسته‌بندی</th>
+                          <th className="p-3.5 font-medium">توضیحات و برچسب‌ها</th>
+                          <th className="p-3.5 font-medium">آدرس مقصد / فایل سرور</th>
+                          <th className="p-3.5 font-medium whitespace-nowrap">داشبوردها</th>
+                          <th className="p-3.5 font-medium whitespace-nowrap">وضعیت نمایش</th>
+                          <th className="p-3.5 font-medium text-left whitespace-nowrap">عملیات</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                        {filteredApps.map((app, idx) => {
+                          const appCategory = categories.find((c) => c.id === app.categoryId);
+                          const isPdf = !!app.fileUrl || app.url.toLowerCase().endsWith('.pdf') || app.url.includes('/uploads/documents/');
+                          const isUnc = app.url.startsWith('\\\\') || app.url.startsWith('//') || app.url.toLowerCase().startsWith('smb://');
+                          const targetDest = app.fileUrl || app.url;
+
+                          return (
+                            <tr
+                              key={app.id}
+                              className="hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition-colors"
+                            >
+                              {/* Order Buttons */}
+                              <td className="p-3.5 whitespace-nowrap">
+                                <div className="flex items-center gap-1">
+                                  <button
+                                    disabled={idx === 0}
+                                    onClick={() => handleMoveApp(idx, 'up')}
+                                    className="p-1 rounded hover:bg-slate-200 dark:hover:bg-slate-700 disabled:opacity-20 cursor-pointer"
+                                    title="انتقال به بالا"
+                                  >
+                                    <ArrowUp className="w-3 h-3" />
+                                  </button>
+                                  <button
+                                    disabled={idx === filteredApps.length - 1}
+                                    onClick={() => handleMoveApp(idx, 'down')}
+                                    className="p-1 rounded hover:bg-slate-200 dark:hover:bg-slate-700 disabled:opacity-20 cursor-pointer"
+                                    title="انتقال به پایین"
+                                  >
+                                    <ArrowDown className="w-3 h-3" />
+                                  </button>
+                                  <span className="font-mono text-indigo-600 dark:text-indigo-400 font-bold text-[10px] mr-1">
+                                    #{app.sortOrder}
+                                  </span>
+                                </div>
+                              </td>
+
+                              {/* App Info & Category */}
+                              <td className="p-3.5">
+                                <div className="flex items-center gap-3">
+                                  <div
+                                    className="w-9 h-9 rounded-xl bg-slate-100 dark:bg-slate-800 p-1.5 flex items-center justify-center border shrink-0 shadow-xs"
+                                    style={{ borderColor: app.accentColor || '#6366F1' }}
+                                  >
+                                    <AppIcon icon={app.icon} accentColor={app.accentColor || '#6366F1'} className="w-5 h-5" />
+                                  </div>
+                                  <div className="min-w-0">
+                                    <p className="font-bold text-slate-900 dark:text-slate-100 truncate">{app.name}</p>
+                                    <div className="flex items-center gap-2 mt-0.5">
+                                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-medium bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200/60 dark:border-slate-700/60">
+                                        <Folder className="w-2.5 h-2.5 text-slate-400" />
+                                        <span>{appCategory ? appCategory.name : 'عمومی'}</span>
+                                      </span>
+                                      <span
+                                        className="w-2 h-2 rounded-full border border-black/10 dark:border-white/10"
+                                        style={{ backgroundColor: app.accentColor || '#3B82F6' }}
+                                        title={`رنگ دکمه: ${app.accentColor || '#3B82F6'}`}
+                                      />
+                                    </div>
+                                  </div>
+                                </div>
+                              </td>
+
+                              {/* Description */}
+                              <td className="p-3.5 max-w-xs">
+                                {app.description ? (
+                                  <p className="text-[11px] text-slate-600 dark:text-slate-300 line-clamp-2">{app.description}</p>
+                                ) : (
+                                  <span className="text-[10px] text-slate-400 italic">بدون توضیحات</span>
+                                )}
+                              </td>
+
+                              {/* Target URL / File */}
+                              <td className="p-3.5 max-w-xs">
+                                <div className="space-y-1">
+                                  <div className="flex items-center gap-1">
+                                    {isPdf ? (
+                                      <span className="px-1.5 py-0.5 rounded bg-rose-50 dark:bg-rose-950/50 text-rose-700 dark:text-rose-300 border border-rose-200/50 text-[10px] font-semibold">
+                                        PDF سرور
+                                      </span>
+                                    ) : isUnc ? (
+                                      <span className="px-1.5 py-0.5 rounded bg-indigo-50 dark:bg-indigo-950/50 text-indigo-700 dark:text-indigo-300 border border-indigo-200/50 text-[10px] font-semibold">
+                                        شبکه SMB
+                                      </span>
+                                    ) : (
+                                      <span className="px-1.5 py-0.5 rounded bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300 border border-blue-200/50 text-[10px] font-semibold">
+                                        وب
+                                      </span>
+                                    )}
+                                  </div>
+                                  <div className="flex items-center gap-1 font-mono text-[11px] text-slate-500 dark:text-slate-400 dir-ltr text-right">
+                                    <span className="truncate flex-1" title={targetDest}>{targetDest}</span>
+                                    <button
+                                      type="button"
+                                      onClick={(e) => handleCopyAppUrl(app, e)}
+                                      className="p-1 rounded text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors shrink-0 cursor-pointer"
+                                      title="کپی کردن آدرس"
+                                    >
+                                      {copiedAppId === app.id ? (
+                                        <Check className="w-3 h-3 text-emerald-500" />
+                                      ) : (
+                                        <Copy className="w-3 h-3" />
+                                      )}
+                                    </button>
+                                  </div>
+                                </div>
+                              </td>
+
+                              {/* Dashboards */}
+                              <td className="p-3.5 whitespace-nowrap">
+                                <div className="flex flex-col gap-1">
+                                  {(!app.dashboards || app.dashboards.includes('public') || app.isPublic) && (
+                                    <span className="text-[10px] text-blue-600 dark:text-blue-400 font-medium">✓ صفحه عمومی</span>
+                                  )}
+                                  {app.dashboards && app.dashboards.includes('it_staff') && (
+                                    <span className="text-[10px] text-purple-600 dark:text-purple-400 font-medium">✓ پورتال IT</span>
+                                  )}
+                                  {app.dashboards && app.dashboards.includes('admin') && (
+                                    <span className="text-[10px] text-slate-500 font-medium">✓ مدیریت</span>
+                                  )}
+                                </div>
+                              </td>
+
+                              {/* Status Toggle */}
+                              <td className="p-3.5 whitespace-nowrap">
+                                <button
+                                  onClick={async () => {
+                                    await api.updateApplication(app.id, { isEnabled: !app.isEnabled });
+                                    loadData();
+                                  }}
+                                  className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-xs font-semibold cursor-pointer transition-all ${
+                                    app.isEnabled
+                                      ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30 hover:bg-emerald-500/25'
+                                      : 'bg-slate-200/80 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border border-slate-300 dark:border-slate-700 hover:bg-slate-300 dark:hover:bg-slate-700'
+                                  }`}
+                                  title="کلیک برای تغییر وضعیت نمایش در پورتال"
+                                >
+                                  {app.isEnabled ? (
+                                    <>
+                                      <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                                      <span>فعال</span>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <EyeOff className="w-3.5 h-3.5 text-slate-400" />
+                                      <span>مخفی</span>
+                                    </>
+                                  )}
+                                </button>
+                              </td>
+
+                              {/* Actions */}
+                              <td className="p-3.5 whitespace-nowrap text-left">
+                                <div className="flex items-center gap-1 justify-end">
+                                  <a
+                                    href={targetDest}
+                                    target={app.openInNewTab ? '_blank' : '_self'}
+                                    rel="noreferrer"
+                                    className="p-1.5 rounded-lg text-slate-500 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                                    title="تست و باز کردن"
+                                  >
+                                    <ExternalLink className="w-3.5 h-3.5" />
+                                  </a>
+                                  <button
+                                    onClick={() => openAppEditModal(app)}
+                                    className="p-1.5 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
+                                    title="ویرایش دکمه"
+                                  >
+                                    <Edit2 className="w-4 h-4" />
+                                  </button>
+                                  <button
+                                    onClick={() => handleDeleteApp(app.id, app.name)}
+                                    className="p-1.5 rounded-lg text-red-500 hover:bg-red-50 dark:hover:bg-red-950/40 cursor-pointer"
+                                    title="حذف برنامه"
+                                  >
+                                    <Trash2 className="w-4 h-4" />
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* 3. CATEGORIES TAB */}
+          {activeTab === 'categories' && (
+            <div className="space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 rounded-2xl bg-white/80 dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800 shadow-xs">
+                <div>
+                  <h3 className="font-bold text-sm text-slate-900 dark:text-slate-100">مدیریت دسته‌بندی‌ها و تعیین اولویت نمایش</h3>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    تعریف دسته‌های سفارشی برای برنامه‌ها و تنظیم ترتیب اولویت نمایش تب‌ها در صفحه عمومی
+                  </p>
+                </div>
                 <button
-                  id="add-application-button"
                   onClick={() => {
-                    setEditingApp({
+                    setEditingCategory({
                       name: '',
-                      description: '',
-                      url: 'https://',
-                      categoryId: categories[0]?.id || 'cat-infra',
-                      icon: 'terminal',
-                      isPublic: true,
-                      dashboards: ['public', 'it_staff', 'admin'],
-                      isEnabled: true,
-                      sortOrder: applications.length + 1,
-                      accentColor: '#3B82F6',
-                      openInNewTab: true,
-                      tags: []
+                      icon: 'folder',
+                      description: ''
                     });
-                    setIsAppModalOpen(true);
+                    setIsCategoryModalOpen(true);
                   }}
-                  className="w-full sm:w-auto px-4 py-2 rounded-xl text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white shadow-sm flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                  className="px-4 py-2 rounded-xl text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white shadow-sm flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
                 >
                   <Plus className="w-4 h-4" />
-                  <span>Add Application</span>
+                  <span>افزودن دسته‌بندی جدید</span>
                 </button>
               </div>
 
-              {/* Applications Table / Cards */}
+              {/* Categories Table */}
               <div className="rounded-2xl bg-white/80 dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800 shadow-xs overflow-hidden">
                 <div className="overflow-x-auto">
-                  <table className="w-full text-left text-xs">
+                  <table className="w-full text-right text-xs">
                     <thead className="bg-slate-50 dark:bg-slate-950/60 border-b border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400">
                       <tr>
-                        <th className="p-3.5 font-medium">Order</th>
-                        <th className="p-3.5 font-medium">Application Button</th>
-                        <th className="p-3.5 font-medium">Destination URL / Path</th>
-                        <th className="p-3.5 font-medium">Status</th>
-                        <th className="p-3.5 font-medium text-right">Actions</th>
+                        <th className="p-3.5 font-medium">اولویت نمایش</th>
+                        <th className="p-3.5 font-medium">نام دسته‌بندی</th>
+                        <th className="p-3.5 font-medium">توضیحات</th>
+                        <th className="p-3.5 font-medium">تعداد برنامه‌ها</th>
+                        <th className="p-3.5 font-medium text-left">عملیات</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                      {filteredApps.map((app, idx) => {
+                      {categories.map((cat, idx) => {
+                        const appCount = applications.filter((a) => a.categoryId === cat.id).length;
                         return (
-                          <tr
-                            key={app.id}
-                            className="hover:bg-slate-50/70 dark:hover:bg-slate-800/40 transition-colors"
-                          >
-                            {/* Order Buttons */}
+                          <tr key={cat.id} className="hover:bg-slate-50/70 dark:hover:bg-slate-800/40 transition-colors">
+                            {/* Priority Reorder */}
                             <td className="p-3.5 whitespace-nowrap">
                               <div className="flex items-center gap-1">
                                 <button
                                   disabled={idx === 0}
-                                  onClick={() => handleMoveApp(idx, 'up')}
-                                  className="p-1 rounded hover:bg-slate-200 dark:hover:bg-slate-700 disabled:opacity-30"
-                                  title="Move Up"
+                                  onClick={() => handleMoveCategory(idx, 'up')}
+                                  className="p-1 rounded hover:bg-slate-200 dark:hover:bg-slate-700 disabled:opacity-30 cursor-pointer"
+                                  title="افزایش اولویت (انتقال به بالا)"
                                 >
                                   <ArrowUp className="w-3 h-3" />
                                 </button>
                                 <button
-                                  disabled={idx === filteredApps.length - 1}
-                                  onClick={() => handleMoveApp(idx, 'down')}
-                                  className="p-1 rounded hover:bg-slate-200 dark:hover:bg-slate-700 disabled:opacity-30"
-                                  title="Move Down"
+                                  disabled={idx === categories.length - 1}
+                                  onClick={() => handleMoveCategory(idx, 'down')}
+                                  className="p-1 rounded hover:bg-slate-200 dark:hover:bg-slate-700 disabled:opacity-30 cursor-pointer"
+                                  title="کاهش اولویت (انتقال به پایین)"
                                 >
                                   <ArrowDown className="w-3 h-3" />
                                 </button>
-                                <span className="font-mono text-slate-400 text-[10px] ml-1">#{app.sortOrder}</span>
+                                <span className="font-mono text-slate-400 text-[10px] mr-1">#{idx + 1}</span>
                               </div>
                             </td>
 
-                            {/* App Info */}
+                            {/* Name & Icon */}
                             <td className="p-3.5">
-                              <div className="flex items-center gap-3">
-                                <div
-                                  className="w-8 h-8 rounded-lg bg-slate-100 dark:bg-slate-800 p-1 flex items-center justify-center border shrink-0"
-                                  style={{ borderColor: app.accentColor }}
-                                >
-                                  <AppIcon icon={app.icon} accentColor={app.accentColor} className="w-5 h-5" />
+                              <div className="flex items-center gap-2.5">
+                                <div className="w-7 h-7 rounded-lg bg-blue-50 dark:bg-blue-950/50 text-blue-600 dark:text-blue-400 border border-blue-200/50 dark:border-blue-800/50 flex items-center justify-center shrink-0">
+                                  <Folder className="w-4 h-4" />
                                 </div>
-                                <div className="min-w-0">
-                                  <p className="font-bold text-slate-900 dark:text-slate-100 truncate">{app.name}</p>
-                                  {app.description && (
-                                    <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate max-w-xs">
-                                      {app.description}
-                                    </p>
-                                  )}
-                                </div>
+                                <span className="font-bold text-slate-900 dark:text-slate-100">{cat.name}</span>
                               </div>
                             </td>
 
-                            {/* URL */}
-                            <td className="p-3.5 max-w-xs truncate font-mono text-[11px] text-slate-500 dark:text-slate-400">
-                              {app.url}
+                            {/* Description */}
+                            <td className="p-3.5 text-slate-500 dark:text-slate-400 max-w-sm truncate">
+                              {cat.description || '—'}
                             </td>
 
-                            {/* Status */}
+                            {/* App Count */}
                             <td className="p-3.5 whitespace-nowrap">
-                              <button
-                                onClick={async () => {
-                                  await api.updateApplication(app.id, { isEnabled: !app.isEnabled });
-                                  loadData();
-                                }}
-                                className={`px-2.5 py-1 rounded-lg text-[10px] font-semibold cursor-pointer transition-colors ${
-                                  app.isEnabled
-                                    ? 'bg-emerald-100 dark:bg-emerald-950/70 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800'
-                                    : 'bg-slate-200 dark:bg-slate-800 text-slate-500'
-                                }`}
-                              >
-                                {app.isEnabled ? 'Enabled' : 'Disabled'}
-                              </button>
+                              <span className="px-2 py-0.5 rounded-full text-[11px] font-mono bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700">
+                                {appCount} برنامه
+                              </span>
                             </td>
 
                             {/* Actions */}
-                            <td className="p-3.5 whitespace-nowrap text-right space-x-1">
+                            <td className="p-3.5 whitespace-nowrap text-left space-x-1 space-x-reverse">
                               <button
                                 onClick={() => {
-                                  setEditingApp(app);
-                                  setIsAppModalOpen(true);
+                                  setEditingCategory(cat);
+                                  setIsCategoryModalOpen(true);
                                 }}
-                                className="p-1.5 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800"
-                                title="Edit Application"
+                                className="p-1.5 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
+                                title="ویرایش دسته‌بندی"
                               >
                                 <Edit2 className="w-4 h-4" />
                               </button>
                               <button
-                                onClick={() => handleDeleteApp(app.id, app.name)}
-                                className="p-1.5 rounded-lg text-red-500 hover:bg-red-50 dark:hover:bg-red-950/40"
-                                title="Delete Application"
+                                onClick={() => handleDeleteCategory(cat.id, cat.name)}
+                                className="p-1.5 rounded-lg text-red-500 hover:bg-red-50 dark:hover:bg-red-950/40 cursor-pointer"
+                                title="حذف دسته‌بندی"
                               >
                                 <Trash2 className="w-4 h-4" />
                               </button>
@@ -1045,33 +2372,33 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             <div className="space-y-4">
               <div className="flex items-center justify-between p-4 rounded-2xl bg-white/80 dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800 shadow-xs">
                 <div>
-                  <h3 className="font-bold text-sm text-slate-900 dark:text-slate-100">User Access & Roles</h3>
+                  <h3 className="font-bold text-sm text-slate-900 dark:text-slate-100">دسترسی کاربران و نقش‌ها</h3>
                   <p className="text-xs text-slate-500 dark:text-slate-400">
-                    Manage administrators and private authenticated users.
+                    مدیریت مدیران سیستم و کاربران احراز هویت شده.
                   </p>
                 </div>
                 <button
                   onClick={() => {
-                    setEditingUser({ username: '', role: 'private_user', isActive: true, password: '' });
+                    setEditingUser({ username: '', role: 'admin', isActive: true, password: '' });
                     setIsUserModalOpen(true);
                   }}
                   className="px-4 py-2 rounded-xl text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white shadow-sm flex items-center gap-1.5 cursor-pointer"
                 >
                   <Plus className="w-4 h-4" />
-                  <span>Create User</span>
+                  <span>افزودن مدیر جدید</span>
                 </button>
               </div>
 
               <div className="rounded-2xl bg-white/80 dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800 shadow-xs overflow-hidden">
-                <table className="w-full text-left text-xs">
+                <table className="w-full text-right text-xs">
                   <thead className="bg-slate-50 dark:bg-slate-950/60 border-b border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400">
                     <tr>
-                      <th className="p-3.5 font-medium">Username</th>
-                      <th className="p-3.5 font-medium">Role</th>
-                      <th className="p-3.5 font-medium">Status</th>
-                      <th className="p-3.5 font-medium">Created Date</th>
-                      <th className="p-3.5 font-medium">Last Login</th>
-                      <th className="p-3.5 font-medium text-right">Actions</th>
+                      <th className="p-3.5 font-medium">نام کاربری</th>
+                      <th className="p-3.5 font-medium">نقش کاربری</th>
+                      <th className="p-3.5 font-medium">وضعیت حساب</th>
+                      <th className="p-3.5 font-medium">تاریخ ایجاد</th>
+                      <th className="p-3.5 font-medium">آخرین ورود</th>
+                      <th className="p-3.5 font-medium text-left">عملیات</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
@@ -1084,16 +2411,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                           {u.username}
                         </td>
                         <td className="p-3.5">
-                          <span
-                            className={`px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase ${
-                              u.role === 'admin'
-                                ? 'bg-purple-100 dark:bg-purple-950 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-900'
-                                : u.role === 'it_staff'
-                                ? 'bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-900'
-                                : 'bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-900'
-                            }`}
-                          >
-                            {u.role === 'it_staff' ? 'IT Staff' : u.role === 'admin' ? 'Admin' : 'Private User'}
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase bg-purple-100 dark:bg-purple-950 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-900">
+                            مدیر سیستم
                           </span>
                         </td>
                         <td className="p-3.5">
@@ -1104,31 +2423,31 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                 : 'bg-slate-200 text-slate-600'
                             }`}
                           >
-                            {u.isActive ? 'Active' : 'Disabled'}
+                            {u.isActive ? 'فعال' : 'غیرفعال'}
                           </span>
                         </td>
-                        <td className="p-3.5 text-slate-400 font-mono text-[11px]">
-                          {new Date(u.createdAt).toLocaleDateString()}
+                        <td className="p-3.5 text-slate-400 font-mono text-[11px] dir-ltr text-right">
+                          {new Date(u.createdAt).toLocaleDateString('fa-IR')}
                         </td>
-                        <td className="p-3.5 text-slate-400 font-mono text-[11px]">
-                          {u.lastLoginAt ? new Date(u.lastLoginAt).toLocaleString() : 'Never'}
+                        <td className="p-3.5 text-slate-400 font-mono text-[11px] dir-ltr text-right">
+                          {u.lastLoginAt ? new Date(u.lastLoginAt).toLocaleString('fa-IR') : 'هرگز'}
                         </td>
-                        <td className="p-3.5 text-right space-x-1">
+                        <td className="p-3.5 text-left space-x-1 space-x-reverse">
                           <button
                             onClick={() => {
                               setEditingUser(u);
                               setIsUserModalOpen(true);
                             }}
-                            className="p-1.5 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800"
-                            title="Edit user"
+                            className="p-1.5 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
+                            title="ویرایش کاربر"
                           >
                             <Edit2 className="w-4 h-4" />
                           </button>
                           <button
                             disabled={currentUser.id === u.id}
                             onClick={() => handleDeleteUser(u.id, u.username)}
-                            className="p-1.5 rounded-lg text-red-500 hover:bg-red-50 dark:hover:bg-red-950/40 disabled:opacity-30"
-                            title="Delete user"
+                            className="p-1.5 rounded-lg text-red-500 hover:bg-red-50 dark:hover:bg-red-950/40 disabled:opacity-30 cursor-pointer"
+                            title="حذف کاربر"
                           >
                             <Trash2 className="w-4 h-4" />
                           </button>
@@ -1147,22 +2466,26 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               {/* Logo Management */}
               <div className="p-5 rounded-2xl bg-white/80 dark:bg-slate-900/80 border border-slate-200 dark:border-white/10 shadow-xs space-y-4">
                 <div>
-                  <h3 className="font-bold text-sm text-slate-900 dark:text-slate-100">Homepage Logo</h3>
+                  <h3 className="font-bold text-sm text-slate-900 dark:text-slate-100">لوگوی سیستم و هدر</h3>
                   <p className="text-xs text-slate-500 dark:text-slate-400">
-                    Upload a custom transparent PNG, SVG, or WebP logo for the homepage header.
+                    آپلود فایل لوگوی شفاف با فرمت PNG، SVG یا WebP جهت نمایش یکپارچه در هر دو پنل (عمومی و مدیریت).
                   </p>
                 </div>
 
                 <div className="flex flex-col sm:flex-row items-center gap-6 p-4 rounded-xl bg-slate-50 dark:bg-slate-950/60 border border-slate-200/80 dark:border-white/5">
-                  <div className="w-24 h-24 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/10 flex items-center justify-center p-3 shadow-inner shrink-0">
+                  <div className="w-28 h-28 rounded-2xl bg-slate-100/70 dark:bg-slate-900/70 border border-slate-200/80 dark:border-white/10 flex items-center justify-center p-2 shadow-inner shrink-0 overflow-hidden relative">
                     {settings.logoUrl ? (
-                      <img src={settings.logoUrl} alt="Logo" className="max-w-full max-h-full object-contain" />
+                      <img
+                        src={settings.logoUrl}
+                        alt="Logo"
+                        className="max-w-full max-h-full object-contain border-0 outline-none shadow-none bg-transparent"
+                      />
                     ) : (
                       <Server className="w-10 h-10 text-indigo-500" />
                     )}
                   </div>
 
-                  <div className="space-y-2 text-center sm:text-left">
+                  <div className="space-y-2 text-center sm:text-right">
                     <input
                       type="file"
                       ref={logoInputRef}
@@ -1177,7 +2500,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         onClick={() => logoInputRef.current?.click()}
                         className="px-4 py-2 rounded-xl text-xs font-semibold bg-indigo-600 hover:bg-indigo-500 text-white shadow-md shadow-indigo-600/20 transition-all duration-200 hover:scale-105 active:scale-95 cursor-pointer"
                       >
-                        Upload Logo Image
+                        آپلود تصویر لوگو
                       </button>
                       {settings.logoUrl && (
                         <button
@@ -1185,14 +2508,87 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                           onClick={handleDeleteLogo}
                           className="px-4 py-2 rounded-xl text-xs font-semibold bg-red-100 dark:bg-red-950 text-red-600 dark:text-red-300 hover:bg-red-200 dark:hover:bg-red-900/60 transition-all duration-200 hover:scale-105 active:scale-95 cursor-pointer"
                         >
-                          Remove Logo
+                          حذف لوگو
                         </button>
                       )}
                     </div>
                     <p className="text-[11px] text-slate-400">
-                      Recommended: 128x128px or higher PNG/SVG with transparent background.
+                      لوگوی شفاف (PNG یا SVG) بدون حاشیه در هدر هر دو پنل با ابعاد بزرگ و شفاف نمایش داده می‌شود.
                     </p>
                   </div>
+                </div>
+              </div>
+
+              {/* Dedicated Admin Console Background & Atmosphere */}
+              <div className="p-5 rounded-2xl bg-white/80 dark:bg-slate-900/80 border border-slate-200 dark:border-white/10 shadow-xs space-y-4">
+                <div>
+                  <h3 className="font-bold text-sm text-slate-900 dark:text-slate-100 flex items-center gap-2">
+                    <ShieldAlert className="w-4 h-4 text-amber-500" />
+                    <span>پوسته و پس‌زمینه اختصاصی صفحه مدیریت</span>
+                  </h3>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                    برای تمایز کامل صفحه مدیریت از صفحه عمومی کاربران، یکی از پوسته‌های اختصاصی کنسول سرور را انتخاب نمایید:
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                  {[
+                    {
+                      id: 'blueprint',
+                      name: 'شبکه سرور (پیش‌فرض)',
+                      desc: 'شبکه فنی مهندسی با هاله‌های آبی و بنفش سرور',
+                      icon: LayoutDashboard
+                    },
+                    {
+                      id: 'cyber-dark',
+                      name: 'اتاق فرماندهی تیره',
+                      desc: 'کنسول مدیریت تیره با ماتریس نقاط درخشان',
+                      icon: Server
+                    },
+                    {
+                      id: 'mesh-indigo',
+                      name: 'گرادیانت فیوژن',
+                      desc: 'ترکیب مدرن سرمه‌ای، بنفش و نورهای ملایم',
+                      icon: Sparkles
+                    },
+                    {
+                      id: 'terminal',
+                      name: 'ترمینال مانیتورینگ',
+                      desc: 'سبک مانیتورینگ سرور با نور زمردی ترمینال',
+                      icon: Activity
+                    }
+                  ].map((bgItem) => {
+                    const Icon = bgItem.icon;
+                    const isSelected = adminBgStyle === bgItem.id;
+                    return (
+                      <button
+                        key={bgItem.id}
+                        type="button"
+                        onClick={() => handleAdminBgStyleChange(bgItem.id as AdminBgStyle)}
+                        className={`p-4 rounded-2xl border text-right transition-all cursor-pointer flex flex-col justify-between gap-3 relative ${
+                          isSelected
+                            ? 'border-indigo-600 bg-indigo-50/50 dark:bg-indigo-950/40 ring-2 ring-indigo-500/30 shadow-md'
+                            : 'border-slate-200 dark:border-white/10 hover:border-slate-300 dark:hover:border-white/20 bg-white dark:bg-slate-900/50'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <div className={`w-8 h-8 rounded-xl flex items-center justify-center ${isSelected ? 'bg-indigo-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300'}`}>
+                            <Icon className="w-4 h-4" />
+                          </div>
+                          {isSelected && (
+                            <span className="inline-flex items-center gap-1 text-[10px] font-bold text-indigo-600 dark:text-indigo-400 bg-indigo-100 dark:bg-indigo-900/60 px-2 py-0.5 rounded-full">
+                              <Check className="w-3 h-3" />
+                              فعال
+                            </span>
+                          )}
+                        </div>
+                        <div>
+                          <div className="text-xs font-bold text-slate-900 dark:text-slate-100">{bgItem.name}</div>
+                          <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-1 leading-relaxed">{bgItem.desc}</div>
+                        </div>
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
 
@@ -1202,10 +2598,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   <div>
                     <h3 className="font-bold text-sm text-slate-900 dark:text-slate-100 flex items-center gap-2">
                       <ImageIcon className="w-4 h-4 text-indigo-500" />
-                      <span>Public Background Picture & Wallpaper</span>
+                      <span>تصویر پس‌زمینه و والپیپر صفحه اصلی</span>
                     </h3>
                     <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                      Change the public homepage background image. Upload a high-res wallpaper or select a curated preset.
+                      تغییر تصویر پس‌زمینه داشبورد. یک والپیپر باکیفیت آپلود کنید یا از کتابخانه تصاویر سرور انتخاب نمایید.
                     </p>
                   </div>
                 </div>
@@ -1216,7 +2612,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     <>
                       <img
                         src={settings.backgroundUrl}
-                        alt="Background Preview"
+                        alt="پیش‌نمایش پس‌زمینه"
                         className={`absolute inset-0 w-full h-full object-cover transition-all duration-300 ${
                           settings.backgroundBlur ? 'blur-xs scale-105' : ''
                         }`}
@@ -1226,13 +2622,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         style={{ opacity: (settings.backgroundOverlayOpacity ?? 30) / 100 }}
                       />
                       <div className="relative z-10 bg-slate-900/80 backdrop-blur-md px-4 py-2 rounded-xl border border-white/20 text-white text-xs flex items-center gap-3">
-                        <span className="font-semibold">Active Background Picture</span>
+                        <span className="font-semibold">تصویر پس‌زمینه فعال</span>
                         <button
                           type="button"
                           onClick={handleDeleteBackground}
                           className="px-2.5 py-1 rounded-lg bg-red-600/80 hover:bg-red-600 text-white text-[11px] font-bold transition-all hover:scale-105 active:scale-95 cursor-pointer"
                         >
-                          Remove
+                          حذف والپیپر
                         </button>
                       </div>
                     </>
@@ -1240,7 +2636,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     <div className="text-center space-y-2 p-4">
                       <ImageIcon className="w-8 h-8 text-slate-400 mx-auto" />
                       <p className="text-xs font-semibold text-slate-500 dark:text-slate-400">
-                        Default Ambient Mesh Theme (No custom background image selected)
+                        پوسته پیش‌فرض بدون تصویر (پس‌زمینه ساده سیستم)
                       </p>
                     </div>
                   )}
@@ -1252,10 +2648,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     <div>
                       <h4 className="font-bold text-xs text-slate-800 dark:text-slate-200 flex items-center gap-2">
                         <ImageIcon className="w-3.5 h-3.5 text-blue-500" />
-                        <span>Uploaded Custom Wallpaper Library</span>
+                        <span>کتابخانه والپیپرهای آپلود شده</span>
                       </h4>
                       <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                        Admin can upload up to 10 background images to the server and select any as the active public dashboard wallpaper.
+                        امکان آپلود تا ۱۰ تصویر پس‌زمینه در سرور و انتخاب هرکدام به عنوان والپیپر فعال داشبورد.
                       </p>
                     </div>
 
@@ -1265,7 +2661,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                           ? 'bg-amber-100 dark:bg-amber-950 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800'
                           : 'bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800'
                       }`}>
-                        {settings.uploadedBackgrounds?.length || 0} / 10 Uploaded
+                        {settings.uploadedBackgrounds?.length || 0} از ۱۰ آپلود شده
                       </span>
 
                       <input
@@ -1284,7 +2680,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         className="px-3.5 py-1.5 rounded-xl text-xs font-semibold bg-blue-600 hover:bg-blue-500 disabled:bg-slate-300 dark:disabled:bg-slate-800 disabled:cursor-not-allowed text-white shadow-xs flex items-center gap-1.5 transition-all cursor-pointer"
                       >
                         <Upload className="w-3.5 h-3.5" />
-                        <span>Upload Wallpaper ({(settings.uploadedBackgrounds?.length || 0)}/10)</span>
+                        <span>آپلود والپیپر ({(settings.uploadedBackgrounds?.length || 0)}/۱۰)</span>
                       </button>
                     </div>
                   </div>
@@ -1295,7 +2691,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       {settings.uploadedBackgrounds.map((bg, idx) => {
                         const isActive = settings.backgroundUrl === bg.url;
                         const sizeKb = bg.sizeBytes ? Math.round(bg.sizeBytes / 1024) : 0;
-                        const displayName = bg.originalName || bg.filename || `Wallpaper Slot ${idx + 1}`;
+                        const displayName = bg.originalName || bg.filename || `جایگاه والپیپر ${idx + 1}`;
                         return (
                           <div
                             key={bg.id || idx}
@@ -1313,16 +2709,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                 referrerPolicy="no-referrer"
                               />
                               {isActive && (
-                                <div className="absolute top-2 left-2 px-2 py-0.5 rounded-md bg-blue-600 text-white text-[10px] font-bold shadow-xs flex items-center gap-1">
+                                <div className="absolute top-2 right-2 px-2 py-0.5 rounded-md bg-blue-600 text-white text-[10px] font-bold shadow-xs flex items-center gap-1">
                                   <Check className="w-3 h-3" />
-                                  <span>Active</span>
+                                  <span>فعال</span>
                                 </div>
                               )}
                               <button
                                 type="button"
                                 onClick={() => handleDeleteUploadedBg(bg.id, displayName)}
-                                className="absolute top-2 right-2 p-1.5 rounded-lg bg-red-600/90 hover:bg-red-600 text-white shadow-xs opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
-                                title="Delete from Library"
+                                className="absolute top-2 left-2 p-1.5 rounded-lg bg-red-600/90 hover:bg-red-600 text-white shadow-xs opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
+                                title="حذف از کتابخانه"
                               >
                                 <Trash2 className="w-3.5 h-3.5" />
                               </button>
@@ -1334,7 +2730,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                   {displayName}
                                 </p>
                                 <p className="text-[10px] text-slate-400 font-mono">
-                                  {sizeKb > 0 ? `${sizeKb} KB &bull; ` : ''}Slot {idx + 1}
+                                  {sizeKb > 0 ? `${sizeKb} کیلوبایت • ` : ''}جایگاه {idx + 1}
                                 </p>
                               </div>
 
@@ -1350,10 +2746,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                 {isActive ? (
                                   <>
                                     <Check className="w-3 h-3 text-blue-500" />
-                                    <span>Active Wallpaper</span>
+                                    <span>والپیپر فعال</span>
                                   </>
                                 ) : (
-                                  <span>Set as Active Wallpaper</span>
+                                  <span>انتخاب به عنوان والپیپر</span>
                                 )}
                               </button>
                             </div>
@@ -1365,7 +2761,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     <div className="p-6 rounded-2xl bg-slate-50 dark:bg-slate-950/30 border border-dashed border-slate-300 dark:border-slate-800 text-center space-y-2">
                       <ImageIcon className="w-8 h-8 text-slate-400 mx-auto opacity-70" />
                       <p className="text-xs font-medium text-slate-600 dark:text-slate-400">
-                        No custom background pictures uploaded yet (0 / 10 slots used).
+                        هنوز هیچ تصویر والپیپری آپلود نشده است (۰ از ۱۰ جایگاه استفاده شده).
                       </p>
                       <button
                         type="button"
@@ -1373,7 +2769,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         className="px-3.5 py-1.5 rounded-xl text-xs font-semibold bg-blue-600 hover:bg-blue-500 text-white shadow-xs inline-flex items-center gap-1.5 cursor-pointer"
                       >
                         <Upload className="w-3.5 h-3.5" />
-                        <span>Upload First Wallpaper</span>
+                        <span>آپلود اولین تصویر والپیپر</span>
                       </button>
                     </div>
                   )}
@@ -1383,7 +2779,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 {settings.backgroundUrl && (
                   <div className="flex items-center justify-between p-3 rounded-xl bg-slate-50 dark:bg-slate-950/40 border border-slate-200/80 dark:border-white/5">
                     <div className="text-xs text-slate-600 dark:text-slate-400">
-                      Currently using active wallpaper: <span className="font-mono text-[11px] text-blue-600 dark:text-blue-400 truncate max-w-xs">{settings.backgroundUrl}</span>
+                      والپیپر فعال کنونی: <span className="font-mono text-[11px] text-blue-600 dark:text-blue-400 truncate max-w-xs dir-ltr inline-block">{settings.backgroundUrl}</span>
                     </div>
                     <button
                       type="button"
@@ -1391,111 +2787,113 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         try {
                           const updated = await api.updateSettings({ ...settings, backgroundUrl: null });
                           setSettings(updated);
-                          showNotification('Wallpaper cleared. Dashboard reverted to solid theme background.');
+                          showNotification('والپیپر با موفقیت حذف شد و به پوسته ساده تغییر یافت.');
                         } catch (err: any) {
-                          setError(err.message || 'Failed to clear wallpaper');
+                          setError(err.message || 'خطا در حذف والپیپر');
                         }
                       }}
                       className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-200 hover:bg-slate-300 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 cursor-pointer transition-colors"
                     >
-                      Clear Active Wallpaper (Use Solid Background)
+                      حذف والپیپر (استفاده از رنگ ساده)
                     </button>
                   </div>
                 )}
 
-                  {/* Direct Background URL Input */}
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                      Direct Background Image URL
-                    </label>
-                    <div className="flex gap-2">
-                      <input
-                        type="url"
-                        placeholder="https://example.com/wallpaper.jpg"
-                        value={settings.backgroundUrl || ''}
-                        onChange={(e) => setSettings({ ...settings, backgroundUrl: e.target.value || null })}
-                        className="flex-1 px-3 py-2 rounded-xl text-xs bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-white/10 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-indigo-500 focus:outline-none transition-all"
-                      />
-                      <button
-                        type="button"
-                        onClick={async () => {
-                          try {
-                            const updated = await api.updateSettings({ ...settings, backgroundUrl: settings.backgroundUrl });
-                            setSettings(updated);
-                            showNotification('Direct wallpaper URL applied successfully');
-                          } catch (err: any) {
-                            setError(err.message || 'Failed to apply wallpaper URL');
-                          }
-                        }}
-                        className="px-3 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-semibold cursor-pointer shrink-0"
-                      >
-                        Apply URL
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Background Blur & Dimming Controls */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
-                    <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-950/60 border border-slate-200/80 dark:border-white/5 space-y-2">
-                      <label className="flex items-center gap-2 text-xs font-semibold text-slate-700 dark:text-slate-300 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={Boolean(settings.backgroundBlur)}
-                          onChange={(e) => setSettings({ ...settings, backgroundBlur: e.target.checked })}
-                          className="rounded text-indigo-600 focus:ring-indigo-500"
-                        />
-                        <span>Apply Soft Background Blur Effect</span>
-                      </label>
-                      <p className="text-[11px] text-slate-400 pl-5">
-                        Adds a gentle Gaussian blur to the wallpaper to maximize text & card legibility.
-                      </p>
-                    </div>
-
-                    <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-950/60 border border-slate-200/80 dark:border-white/5 space-y-2">
-                      <div className="flex justify-between items-center text-xs font-semibold text-slate-700 dark:text-slate-300">
-                        <span>Background Dimming Overlay</span>
-                        <span className="font-mono text-indigo-500 font-bold">{settings.backgroundOverlayOpacity ?? 30}%</span>
-                      </div>
-                      <input
-                        type="range"
-                        min="0"
-                        max="90"
-                        step="5"
-                        value={settings.backgroundOverlayOpacity ?? 30}
-                        onChange={(e) => setSettings({ ...settings, backgroundOverlayOpacity: Number(e.target.value) })}
-                        className="w-full accent-indigo-600 cursor-pointer"
-                      />
-                      <p className="text-[11px] text-slate-400">
-                        Darkens the wallpaper for high contrast with light and dark elements.
-                      </p>
-                    </div>
+                {/* Direct Background URL Input */}
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                    آدرس اینترنتی مستقیم تصویر (URL)
+                  </label>
+                  <div className="flex gap-2">
+                    <input
+                      type="url"
+                      placeholder="https://example.com/wallpaper.jpg"
+                      value={settings.backgroundUrl || ''}
+                      onChange={(e) => setSettings({ ...settings, backgroundUrl: e.target.value || null })}
+                      className="flex-1 px-3 py-2 rounded-xl text-xs bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-white/10 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-indigo-500 focus:outline-none transition-all dir-ltr text-right"
+                    />
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        try {
+                          const updated = await api.updateSettings({ ...settings, backgroundUrl: settings.backgroundUrl });
+                          setSettings(updated);
+                          showNotification('آدرس تصویر پس‌زمینه با موفقیت اعمال شد.');
+                        } catch (err: any) {
+                          setError(err.message || 'خطا در اعمال آدرس پس‌زمینه');
+                        }
+                      }}
+                      className="px-3 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-semibold cursor-pointer shrink-0"
+                    >
+                      اعمال آدرس
+                    </button>
                   </div>
                 </div>
 
+                {/* Background Blur & Dimming Controls */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
+                  <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-950/60 border border-slate-200/80 dark:border-white/5 space-y-2">
+                    <label className="flex items-center gap-2 text-xs font-semibold text-slate-700 dark:text-slate-300 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={Boolean(settings.backgroundBlur)}
+                        onChange={(e) => setSettings({ ...settings, backgroundBlur: e.target.checked })}
+                        className="rounded text-indigo-600 focus:ring-indigo-500"
+                      />
+                      <span>اعمال افکت بلور (مات‌سازی ملایم) روی والپیپر</span>
+                    </label>
+                    <p className="text-[11px] text-slate-400 pr-5">
+                      مات‌سازی ملایم گوسی برای افزایش خوانایی و وضوح کارت‌ها و متون.
+                    </p>
+                  </div>
+
+                  <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-950/60 border border-slate-200/80 dark:border-white/5 space-y-2">
+                    <div className="flex justify-between items-center text-xs font-semibold text-slate-700 dark:text-slate-300">
+                      <span>شدت لایه تیرگی روی والپیپر (Dimming)</span>
+                      <span className="font-mono text-indigo-500 font-bold">{settings.backgroundOverlayOpacity ?? 30}%</span>
+                    </div>
+                    <input
+                      type="range"
+                      min="0"
+                      max="90"
+                      step="5"
+                      value={settings.backgroundOverlayOpacity ?? 30}
+                      onChange={(e) => setSettings({ ...settings, backgroundOverlayOpacity: Number(e.target.value) })}
+                      className="w-full accent-indigo-600 cursor-pointer"
+                    />
+                    <p className="text-[11px] text-slate-400">
+                      تیره کردن تصویر برای کنتراست ایده‌آل عناصر با پس‌زمینه.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
               {/* Title & Subtitle */}
               <div className="p-5 rounded-2xl bg-white/80 dark:bg-slate-900/80 border border-slate-200 dark:border-white/10 shadow-xs space-y-4">
-                <h3 className="font-bold text-sm text-slate-900 dark:text-slate-100">Header Branding</h3>
+                <h3 className="font-bold text-sm text-slate-900 dark:text-slate-100">عنوان و نام‌گذاری سرور</h3>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                      Homepage Title
+                      عنوان
                     </label>
                     <input
                       type="text"
                       value={settings.title}
                       onChange={(e) => setSettings({ ...settings, title: e.target.value })}
+                      placeholder="مثال: مدیریت تدارکات شیراز"
                       className="w-full px-3 py-2 rounded-xl text-xs bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-white/10 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-indigo-500 focus:outline-none transition-all"
                     />
                   </div>
 
                   <div>
                     <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                      Homepage Subtitle
+                      زیرعنوان
                     </label>
                     <input
                       type="text"
                       value={settings.subtitle}
                       onChange={(e) => setSettings({ ...settings, subtitle: e.target.value })}
+                      placeholder="مثال: دفتر شیراز"
                       className="w-full px-3 py-2 rounded-xl text-xs bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-white/10 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-indigo-500 focus:outline-none transition-all"
                     />
                   </div>
@@ -1504,54 +2902,54 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
               {/* Clock & Layout */}
               <div className="p-5 rounded-2xl bg-white/80 dark:bg-slate-900/80 border border-slate-200 dark:border-white/10 shadow-xs space-y-4">
-                <h3 className="font-bold text-sm text-slate-900 dark:text-slate-100">Clock & Grid Layout</h3>
+                <h3 className="font-bold text-sm text-slate-900 dark:text-slate-100">تنظیمات ساعت و چیدمان ستون‌ها</h3>
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                   <div>
                     <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                      Clock Display Mode
+                      حالت نمایش ساعت
                     </label>
                     <select
                       value={settings.clockType}
                       onChange={(e) => setSettings({ ...settings, clockType: e.target.value as any })}
-                      className="w-full px-3 py-2 rounded-xl text-xs bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-white/10 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-indigo-500 focus:outline-none transition-all"
+                      className="w-full px-3 py-2 rounded-xl text-xs bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-white/10 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-indigo-500 focus:outline-none transition-all cursor-pointer"
                     >
-                      <option value="analog">Analog Clock Only</option>
-                      <option value="digital">Digital Clock Only</option>
-                      <option value="both">Both (Analog + Digital)</option>
-                      <option value="none">Disabled (No Clock)</option>
+                      <option value="analog">فقط ساعت عقربه‌ای (آنالوگ)</option>
+                      <option value="digital">فقط ساعت دیجیتال</option>
+                      <option value="both">هر دو (آنالوگ و دیجیتال)</option>
+                      <option value="none">غیرفعال (بدون ساعت)</option>
                     </select>
                   </div>
 
                   <div>
                     <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                      Default Theme
+                      پوسته پیش‌فرض
                     </label>
                     <select
                       value={settings.defaultTheme}
                       onChange={(e) => setSettings({ ...settings, defaultTheme: e.target.value as any })}
-                      className="w-full px-3 py-2 rounded-xl text-xs bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-white/10 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-indigo-500 focus:outline-none transition-all"
+                      className="w-full px-3 py-2 rounded-xl text-xs bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-white/10 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-indigo-500 focus:outline-none transition-all cursor-pointer"
                     >
-                      <option value="light">Light Mode (Default)</option>
-                      <option value="dark">Dark Mode</option>
+                      <option value="light">حالت روشن (پیش‌فرض)</option>
+                      <option value="dark">حالت تیره (Dark Mode)</option>
                     </select>
                   </div>
 
                   <div>
                     <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                      Grid Columns (Public Dashboard Buttons)
+                      تعداد ستون‌ها (دکمه‌های داشبورد)
                     </label>
                     <select
                       value={settings.gridColumns || 4}
                       onChange={(e) => setSettings({ ...settings, gridColumns: Number(e.target.value) as any })}
-                      className="w-full px-3 py-2 rounded-xl text-xs bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-white/10 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-indigo-500 focus:outline-none transition-all"
+                      className="w-full px-3 py-2 rounded-xl text-xs bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-white/10 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-indigo-500 focus:outline-none transition-all cursor-pointer"
                     >
-                      <option value={2}>2 Columns</option>
-                      <option value={3}>3 Columns</option>
-                      <option value={4}>4 Columns (Default)</option>
-                      <option value={5}>5 Columns</option>
-                      <option value={6}>6 Columns</option>
-                      <option value={7}>7 Columns</option>
-                      <option value={8}>8 Columns (Wide / Ultra-dense)</option>
+                      <option value={2}>۲ ستون</option>
+                      <option value={3}>۳ ستون</option>
+                      <option value={4}>۴ ستون (پیش‌فرض)</option>
+                      <option value={5}>۵ ستون</option>
+                      <option value={6}>۶ ستون</option>
+                      <option value={7}>۷ ستون</option>
+                      <option value={8}>۸ ستون (فوق فشرده)</option>
                     </select>
                   </div>
                 </div>
@@ -1564,7 +2962,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       onChange={(e) => setSettings({ ...settings, showSeconds: e.target.checked })}
                       className="rounded text-indigo-600 focus:ring-indigo-500"
                     />
-                    <span>Show Seconds Hand / Readout</span>
+                    <span>نمایش ثانیه‌شمار ساعت</span>
                   </label>
 
                   <label className="flex items-center gap-2 text-xs font-medium text-slate-700 dark:text-slate-300 cursor-pointer">
@@ -1574,7 +2972,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       onChange={(e) => setSettings({ ...settings, showDate: e.target.checked })}
                       className="rounded text-indigo-600 focus:ring-indigo-500"
                     />
-                    <span>Display Date in Header</span>
+                    <span>نمایش تاریخ در هدر</span>
                   </label>
 
                   <label className="flex items-center gap-2 text-xs font-medium text-slate-700 dark:text-slate-300 cursor-pointer">
@@ -1584,14 +2982,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       onChange={(e) => setSettings({ ...settings, showTelemetryBar: e.target.checked })}
                       className="rounded text-indigo-600 focus:ring-indigo-500"
                     />
-                    <span>Show Host Telemetry Bar (CPU, RAM, Storage, Uptime)</span>
+                    <span>نمایش نوار آمار سرور (پردازنده، حافظه، دیسک، آپتایم)</span>
                   </label>
                 </div>
 
                 {settings.showTelemetryBar !== false && (
                   <div className="pt-2 border-t border-slate-100 dark:border-slate-800 flex items-center gap-4">
                     <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">
-                      Telemetry Bar Position:
+                      موقعیت نوار وضعیت سرور:
                     </label>
                     <div className="flex items-center gap-3">
                       <label className="flex items-center gap-1.5 text-xs text-slate-600 dark:text-slate-400 cursor-pointer">
@@ -1603,7 +3001,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                           onChange={() => setSettings({ ...settings, telemetryPosition: 'top' })}
                           className="text-indigo-600 focus:ring-indigo-500"
                         />
-                        <span>Top (Below Header)</span>
+                        <span>بالا (زیر هدر)</span>
                       </label>
                       <label className="flex items-center gap-1.5 text-xs text-slate-600 dark:text-slate-400 cursor-pointer">
                         <input
@@ -1614,7 +3012,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                           onChange={() => setSettings({ ...settings, telemetryPosition: 'bottom' })}
                           className="text-indigo-600 focus:ring-indigo-500"
                         />
-                        <span>Bottom (Above Footer)</span>
+                        <span>پایین (بالای فوتر)</span>
                       </label>
                     </div>
                   </div>
@@ -1626,7 +3024,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   type="submit"
                   className="px-6 py-2.5 rounded-xl font-bold text-xs bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg shadow-indigo-600/30 transition-all duration-200 hover:scale-105 active:scale-95 cursor-pointer"
                 >
-                  Save Appearance & Wallpaper Changes
+                  ذخیره تنظیمات ظاهر و والپیپر
                 </button>
               </div>
             </form>
@@ -1639,13 +3037,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               <div className="flex flex-col sm:flex-row gap-3 items-center justify-between p-4 rounded-2xl bg-white/80 dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800 shadow-xs">
                 <div className="flex flex-wrap items-center gap-3 w-full sm:w-auto">
                   <div className="relative flex-1 sm:w-64">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                    <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                     <input
                       type="text"
-                      placeholder="Search user, action, IP, details..."
+                      placeholder="جستجو در کاربر، عملیات، IP، جزئیات..."
                       value={logSearch}
                       onChange={(e) => setLogSearch(e.target.value)}
-                      className="w-full pl-9 pr-3 py-2 text-xs rounded-xl bg-slate-100 dark:bg-slate-800 border-none text-slate-800 dark:text-slate-200 focus:ring-2 focus:ring-indigo-500 outline-none"
+                      className="w-full pr-9 pl-3 py-2 text-xs rounded-xl bg-slate-100 dark:bg-slate-800 border-none text-slate-800 dark:text-slate-200 focus:ring-2 focus:ring-indigo-500 outline-none"
                     />
                   </div>
 
@@ -1654,7 +3052,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     onChange={(e) => setLogActionFilter(e.target.value)}
                     className="text-xs px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 border-none text-slate-700 dark:text-slate-300 focus:ring-2 focus:ring-indigo-500 outline-none cursor-pointer"
                   >
-                    <option value="all">All Event Actions ({auditLogs.length})</option>
+                    <option value="all">همه انواع عملیات ({auditLogs.length})</option>
                     {uniqueLogActions.map((action) => (
                       <option key={action} value={action}>
                         {action} ({auditLogs.filter((l) => l.action === action).length})
@@ -1669,15 +3067,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       try {
                         const logs = await api.getAuditLogs();
                         setAuditLogs(logs);
-                        showNotification('Audit log feed refreshed');
+                        showNotification('فهرست گزارش‌های رویداد به‌روزرسانی شد.');
                       } catch (err: any) {
-                        setError(err.message || 'Failed to refresh logs');
+                        setError(err.message || 'خطا در تازه‌سازی گزارش‌ها');
                       }
                     }}
                     className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 transition-colors cursor-pointer"
                   >
                     <RefreshCw className="w-3.5 h-3.5" />
-                    <span>Refresh</span>
+                    <span>تازه‌سازی</span>
                   </button>
 
                   <button
@@ -1686,7 +3084,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold bg-red-50 hover:bg-red-100 dark:bg-red-950/40 dark:hover:bg-red-900/50 text-red-600 dark:text-red-300 border border-red-200 dark:border-red-900 transition-colors cursor-pointer disabled:opacity-40"
                   >
                     <Trash2 className="w-3.5 h-3.5" />
-                    <span>{isClearingLogs ? 'Clearing...' : 'Clear Audit History'}</span>
+                    <span>{isClearingLogs ? 'در حال پاک‌سازی...' : 'پاک‌سازی تاریخچه لاگ‌ها'}</span>
                   </button>
                 </div>
               </div>
@@ -1694,14 +3092,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               {/* Logs Table */}
               <div className="rounded-2xl bg-white/80 dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800 shadow-xs overflow-hidden">
                 <div className="overflow-x-auto">
-                  <table className="w-full text-left text-xs">
+                  <table className="w-full text-right text-xs">
                     <thead>
                       <tr className="bg-slate-50 dark:bg-slate-800/60 border-b border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400">
-                        <th className="px-4 py-3 font-semibold">Timestamp</th>
-                        <th className="px-4 py-3 font-semibold">User</th>
-                        <th className="px-4 py-3 font-semibold">Event Action</th>
-                        <th className="px-4 py-3 font-semibold">Event Details</th>
-                        <th className="px-4 py-3 font-semibold">Client IP</th>
+                        <th className="px-4 py-3 font-semibold">زمان ثبت</th>
+                        <th className="px-4 py-3 font-semibold">کاربر</th>
+                        <th className="px-4 py-3 font-semibold">نوع عملیات</th>
+                        <th className="px-4 py-3 font-semibold">جزئیات رویداد</th>
+                        <th className="px-4 py-3 font-semibold">آدرس IP</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
@@ -1710,9 +3108,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                           <td colSpan={5} className="px-4 py-12 text-center text-slate-400">
                             <div className="max-w-xs mx-auto space-y-2">
                               <ScrollText className="w-8 h-8 text-slate-300 dark:text-slate-600 mx-auto" />
-                              <p className="font-semibold text-slate-600 dark:text-slate-400">No audit records found</p>
+                              <p className="font-semibold text-slate-600 dark:text-slate-400">هیچ رویدادی یافت نشد</p>
                               <p className="text-[11px] text-slate-400">
-                                Administrative changes, authentication attempts, and exports will appear here.
+                                تغییرات مدیریتی، ورود کاربران و پشتیبان‌گیری‌ها در اینجا ثبت می‌شوند.
                               </p>
                             </div>
                           </td>
@@ -1723,8 +3121,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                           const isSuccess = log.action.includes('LOGIN') || log.action.includes('CREATED') || log.action.includes('EXPORTED');
                           return (
                             <tr key={log.id} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/30 transition-colors">
-                              <td className="px-4 py-3 text-[11px] font-mono text-slate-500 whitespace-nowrap">
-                                {new Date(log.timestamp).toLocaleString()}
+                              <td className="px-4 py-3 text-[11px] font-mono text-slate-500 whitespace-nowrap dir-ltr text-right">
+                                {new Date(log.timestamp).toLocaleString('fa-IR')}
                               </td>
                               <td className="px-4 py-3 font-semibold text-slate-800 dark:text-slate-200">
                                 <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 font-mono text-[11px]">
@@ -1733,7 +3131,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                               </td>
                               <td className="px-4 py-3">
                                 <span
-                                  className={`inline-flex px-2 py-0.5 rounded-full text-[10px] font-mono font-bold tracking-tight ${
+                                  className={`inline-flex px-2 py-0.5 rounded-full text-[10px] font-mono font-bold tracking-tight dir-ltr ${
                                     isWarning
                                       ? 'bg-amber-100 dark:bg-amber-950 text-amber-700 dark:text-amber-300'
                                       : isSuccess
@@ -1747,7 +3145,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                               <td className="px-4 py-3 text-slate-700 dark:text-slate-300 max-w-md break-words">
                                 {log.details}
                               </td>
-                              <td className="px-4 py-3 text-[11px] font-mono text-slate-400 whitespace-nowrap">
+                              <td className="px-4 py-3 text-[11px] font-mono text-slate-400 whitespace-nowrap dir-ltr text-right">
                                 {log.ip || '127.0.0.1'}
                               </td>
                             </tr>
@@ -1759,8 +3157,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 </div>
                 {filteredAuditLogs.length > 0 && (
                   <div className="px-4 py-3 bg-slate-50/50 dark:bg-slate-800/30 border-t border-slate-200 dark:border-slate-800 text-[11px] text-slate-500 flex justify-between items-center">
-                    <span>Showing {filteredAuditLogs.length} of {auditLogs.length} audit entries</span>
-                    <span className="font-mono text-[10px]">Retention: Auto-appended to JSON storage</span>
+                    <span>نمایش {filteredAuditLogs.length} از {auditLogs.length} رویداد</span>
+                    <span className="font-mono text-[10px]">محل نگهداری: ذخیره خودکار فایل‌های دائمی سیستم</span>
                   </div>
                 )}
               </div>
@@ -1770,51 +3168,317 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           {/* 6. SYSTEM & BACKUP TAB */}
           {activeTab === 'system' && (
             <div className="space-y-6">
-              {/* Backup & Restore */}
-              <div className="p-5 rounded-2xl bg-white/80 dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800 shadow-xs space-y-4">
-                <div>
-                  <h3 className="font-bold text-sm text-slate-900 dark:text-slate-100">Backup & Disaster Recovery</h3>
-                  <p className="text-xs text-slate-500 dark:text-slate-400">
-                    Export your complete dashboard configuration, applications, categories, and settings as JSON.
-                  </p>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200/80 dark:border-slate-800/80 space-y-2">
-                    <h4 className="font-bold text-xs text-slate-800 dark:text-slate-200">Export Backup</h4>
-                    <p className="text-[11px] text-slate-500">
-                      Download sanitized JSON configuration without user passwords.
+              {/* Backup & Restore System */}
+              <div className="p-5 rounded-2xl bg-white/80 dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800 shadow-xs space-y-5">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                  <div>
+                    <h3 className="font-bold text-sm text-slate-900 dark:text-slate-100 flex items-center gap-2">
+                      <Archive className="w-4 h-4 text-purple-500" />
+                      <span>مدیریت فایل‌های پشتیبان کامل (ZIP Backup)</span>
+                    </h3>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                      پشتیبان‌گیری جامع شامل پایگاه‌داده، تصاویر، والپیپرها، کاربران و فایل‌های آپلودشده (حداکثر ۲۰ نسخه با چرخش خودکار).
                     </p>
-                    <button
-                      onClick={handleExportBackup}
-                      className="mt-2 px-4 py-2 rounded-xl text-xs font-semibold bg-purple-600 hover:bg-purple-700 text-white flex items-center gap-1.5 cursor-pointer"
-                    >
-                      <Download className="w-4 h-4" />
-                      <span>Download Backup JSON</span>
-                    </button>
                   </div>
 
-                  <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200/80 dark:border-slate-800/80 space-y-2">
-                    <h4 className="font-bold text-xs text-slate-800 dark:text-slate-200">Restore Backup</h4>
-                    <p className="text-[11px] text-slate-500">
-                      Upload previously exported backup to restore apps and layouts.
-                    </p>
+                  <div className="flex flex-wrap items-center gap-2">
                     <input
                       type="file"
-                      ref={importFileRef}
-                      onChange={handleImportBackup}
-                      accept=".json,application/json"
+                      ref={zipBackupInputRef}
+                      onChange={handleUploadZipBackup}
+                      accept=".zip,application/zip"
                       className="hidden"
-                      id="admin-import-file-input"
+                      id="admin-zip-upload-input"
                     />
                     <button
-                      onClick={() => importFileRef.current?.click()}
-                      className="mt-2 px-4 py-2 rounded-xl text-xs font-semibold bg-slate-800 hover:bg-slate-900 dark:bg-slate-700 dark:hover:bg-slate-600 text-white flex items-center gap-1.5 cursor-pointer"
+                      type="button"
+                      disabled={isUploadingBackup}
+                      onClick={() => zipBackupInputRef.current?.click()}
+                      className="px-3.5 py-2 rounded-xl text-xs font-semibold bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 border border-slate-200 dark:border-slate-700 flex items-center gap-1.5 cursor-pointer disabled:opacity-50 transition-colors"
                     >
-                      <Upload className="w-4 h-4" />
-                      <span>Select JSON Backup File</span>
+                      <Upload className="w-4 h-4 text-indigo-500" />
+                      <span>{isUploadingBackup ? 'در حال آپلود و بازیابی...' : 'آپلود و بازگردانی فایل ZIP'}</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      disabled={isCreatingBackup}
+                      onClick={handleCreateZipBackup}
+                      className="px-4 py-2 rounded-xl text-xs font-bold bg-purple-600 hover:bg-purple-700 text-white shadow-md shadow-purple-600/20 flex items-center gap-1.5 cursor-pointer disabled:opacity-50 transition-all hover:scale-105 active:scale-95"
+                    >
+                      <Plus className="w-4 h-4" />
+                      <span>{isCreatingBackup ? 'در حال تهیه پشتیبان...' : 'ایجاد نسخه پشتیبان جدید'}</span>
                     </button>
                   </div>
+                </div>
+
+                {/* Backups List Table */}
+                <div className="rounded-2xl border border-slate-200 dark:border-slate-800 overflow-hidden bg-slate-50/50 dark:bg-slate-950/40">
+                  <div className="p-3.5 bg-slate-100/70 dark:bg-slate-900/60 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between text-xs">
+                    <div className="flex items-center gap-2 font-semibold text-slate-700 dark:text-slate-300">
+                      <FileArchive className="w-4 h-4 text-purple-500" />
+                      <span>فهرست نسخه‌های ذخیره‌شده</span>
+                      <span className="px-2 py-0.5 rounded-full bg-purple-100 dark:bg-purple-950 text-purple-700 dark:text-purple-300 text-[10px] font-bold">
+                        {toPersianDigits(backups.length)} از ۲۰ نسخه مجاز
+                      </span>
+                    </div>
+
+                    <button
+                      onClick={loadBackups}
+                      disabled={isLoadingBackups}
+                      className="text-[11px] text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 flex items-center gap-1 cursor-pointer"
+                    >
+                      <RefreshCw className={`w-3 h-3 ${isLoadingBackups ? 'animate-spin' : ''}`} />
+                      <span>تازه‌سازی لیست</span>
+                    </button>
+                  </div>
+
+                  {backups.length === 0 ? (
+                    <div className="p-8 text-center text-slate-400 space-y-2">
+                      <Archive className="w-10 h-10 text-slate-300 dark:text-slate-700 mx-auto" />
+                      <p className="text-xs font-semibold text-slate-600 dark:text-slate-400">هنوز نسخه پشتیبان ZIP ایجاد نشده است</p>
+                      <p className="text-[11px] text-slate-400">
+                        با فشردن دکمه «ایجاد نسخه پشتیبان جدید» اولین نسخه کامل را ذخیره کنید.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="divide-y divide-slate-200/70 dark:divide-slate-800/70">
+                      {backups.map((b) => (
+                        <div
+                          key={b.filename}
+                          className="p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-white dark:hover:bg-slate-900/80 transition-colors"
+                        >
+                          <div className="space-y-1">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span className="font-mono text-xs font-bold text-slate-800 dark:text-slate-200" dir="ltr">
+                                {b.filename}
+                              </span>
+                              <span className="px-2 py-0.5 rounded-md bg-slate-200 dark:bg-slate-800 text-[10px] font-mono text-slate-600 dark:text-slate-300" dir="ltr">
+                                {formatBytes(b.size)}
+                              </span>
+                            </div>
+
+                            <div className="flex flex-wrap items-center gap-3 text-[11px] text-slate-500 dark:text-slate-400">
+                              <span>تاریخ ثبت: <span className="font-medium text-slate-700 dark:text-slate-300">{formatPersianDate(b.createdAt)}</span></span>
+                              <span>·</span>
+                              {b.stats && (
+                                <span className="flex items-center gap-2">
+                                  <span>برنامه‌ها: <b className="text-blue-600 dark:text-blue-400">{toPersianDigits(b.stats.appsCount)}</b></span>
+                                  <span>دسته‌ها: <b className="text-purple-600 dark:text-purple-400">{toPersianDigits(b.stats.categoriesCount)}</b></span>
+                                  <span>کاربران: <b className="text-emerald-600 dark:text-emerald-400">{toPersianDigits(b.stats.usersCount)}</b></span>
+                                  <span>فایل‌ها: <b className="text-amber-600 dark:text-amber-400">{toPersianDigits(b.stats.uploadsCount)}</b></span>
+                                </span>
+                              )}
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-2 shrink-0">
+                            <a
+                              href={api.getBackupDownloadUrl(b.filename)}
+                              download={b.filename}
+                              className="px-3 py-1.5 rounded-xl text-xs font-semibold bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 flex items-center gap-1.5 transition-colors cursor-pointer"
+                              title="دانلود فایل ZIP"
+                            >
+                              <Download className="w-3.5 h-3.5 text-blue-500" />
+                              <span>دانلود</span>
+                            </a>
+
+                            <button
+                              onClick={() => handleRestoreZipBackup(b.filename)}
+                              disabled={isRestoringBackup === b.filename}
+                              className="px-3 py-1.5 rounded-xl text-xs font-semibold bg-amber-50 hover:bg-amber-100 dark:bg-amber-950/40 dark:hover:bg-amber-900/60 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800 flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50"
+                              title="بازیابی این نسخه"
+                            >
+                              <RefreshCw className={`w-3.5 h-3.5 ${isRestoringBackup === b.filename ? 'animate-spin' : ''}`} />
+                              <span>{isRestoringBackup === b.filename ? 'در حال بازیابی...' : 'بازیابی'}</span>
+                            </button>
+
+                            <button
+                              onClick={() => handleDeleteZipBackup(b.filename)}
+                              className="p-1.5 rounded-xl text-red-500 hover:bg-red-50 dark:hover:bg-red-950/40 transition-colors cursor-pointer"
+                              title="حذف نسخه پشتیبان"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Data Portability: Excel and JSON Import/Export Section */}
+                <div className="pt-4 border-t border-slate-200/80 dark:border-slate-800/80 space-y-3">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
+                    <div>
+                      <h4 className="font-bold text-xs sm:text-sm text-slate-800 dark:text-slate-200 flex items-center gap-2">
+                        <FileSpreadsheet className="w-4 h-4 text-emerald-500" />
+                        <span>انتقال، ورودی و خروجی داده‌ها (اکسل و JSON)</span>
+                      </h4>
+                      <p className="text-[11px] text-slate-400 mt-0.5">
+                        استخراج یا ورود گروهی اطلاعات برنامه‌ها و دسته‌بندی‌ها به سادگی از طریق اکسل و فایل ساختاریافته JSON
+                      </p>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={handleDownloadExcelTemplate}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-xs font-semibold transition-colors cursor-pointer self-start sm:self-auto"
+                      title="دانلود فایل نمونه اکسل جهت تکمیل و ورود"
+                    >
+                      <Download className="w-3.5 h-3.5 text-emerald-500" />
+                      <span>دانلود قالب آماده اکسل</span>
+                    </button>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+                    {/* Excel Card */}
+                    <div className="p-4 rounded-2xl bg-gradient-to-br from-emerald-50/80 to-emerald-100/20 dark:from-emerald-950/30 dark:to-slate-900/40 border border-emerald-200/70 dark:border-emerald-900/40 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2.5">
+                          <div className="w-9 h-9 rounded-xl bg-emerald-500/10 dark:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 flex items-center justify-center border border-emerald-500/20">
+                            <FileSpreadsheet className="w-5 h-5" />
+                          </div>
+                          <div>
+                            <span className="font-bold text-xs text-slate-900 dark:text-slate-100 block">
+                              اکسل (Excel / Spreadsheet)
+                            </span>
+                            <span className="text-[10px] text-slate-500 dark:text-slate-400">
+                              فرمت‌های پشتیبانی‌شده: xlsx. و csv.
+                            </span>
+                          </div>
+                        </div>
+
+                        <span className="px-2 py-0.5 rounded-md bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300 text-[10px] font-bold">
+                          {toPersianDigits(applications.length)} برنامه
+                        </span>
+                      </div>
+
+                      <p className="text-[11px] text-slate-600 dark:text-slate-400 leading-relaxed">
+                        مدیریت و ویرایش گروهی، افزودن صدها سرویس به صورت یکجا، و ایجاد گزارش در نرم‌افزارهای اکسل و شیت‌ها.
+                      </p>
+
+                      <div className="grid grid-cols-2 gap-2 pt-1">
+                        <button
+                          type="button"
+                          onClick={handleExportExcel}
+                          className="px-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold flex items-center justify-center gap-1.5 shadow-sm shadow-emerald-600/20 transition-all hover:scale-[1.02] active:scale-95 cursor-pointer"
+                        >
+                          <Download className="w-3.5 h-3.5" />
+                          <span>خروجی اکسل</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => excelImportRef.current?.click()}
+                          className="px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-emerald-300 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-50 dark:hover:bg-emerald-950/50 text-xs font-bold flex items-center justify-center gap-1.5 transition-all hover:scale-[1.02] active:scale-95 cursor-pointer"
+                        >
+                          <Upload className="w-3.5 h-3.5" />
+                          <span>ورودی از اکسل</span>
+                        </button>
+                      </div>
+
+                      <input
+                        type="file"
+                        ref={excelImportRef}
+                        onChange={handleSelectExcelFile}
+                        accept=".xlsx,.xls,.csv"
+                        className="hidden"
+                        id="admin-excel-import-input"
+                      />
+                    </div>
+
+                    {/* JSON Card */}
+                    <div className="p-4 rounded-2xl bg-gradient-to-br from-purple-50/80 to-purple-100/20 dark:from-purple-950/30 dark:to-slate-900/40 border border-purple-200/70 dark:border-purple-900/40 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2.5">
+                          <div className="w-9 h-9 rounded-xl bg-purple-500/10 dark:bg-purple-500/20 text-purple-600 dark:text-purple-400 flex items-center justify-center border border-purple-500/20">
+                            <FileJson className="w-5 h-5" />
+                          </div>
+                          <div>
+                            <span className="font-bold text-xs text-slate-900 dark:text-slate-100 block">
+                              جی‌سان (JSON ساختاریافته)
+                            </span>
+                            <span className="text-[10px] text-slate-500 dark:text-slate-400">
+                              پشتیبان‌گیری سبک و سازگار با دیتابیس
+                            </span>
+                          </div>
+                        </div>
+
+                        <span className="px-2 py-0.5 rounded-md bg-purple-100 dark:bg-purple-950 text-purple-800 dark:text-purple-300 text-[10px] font-bold">
+                          فوق‌سریع
+                        </span>
+                      </div>
+
+                      <p className="text-[11px] text-slate-600 dark:text-slate-400 leading-relaxed">
+                        استخراج تمام تنظیمات، دسته‌ها و برنامه‌ها در قالب یک فایل استاندارد متنی جهت انتقال مستقیم میان سرورها.
+                      </p>
+
+                      <div className="grid grid-cols-2 gap-2 pt-1">
+                        <button
+                          type="button"
+                          onClick={handleExportJson}
+                          className="px-3 py-2 rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold flex items-center justify-center gap-1.5 shadow-sm shadow-purple-600/20 transition-all hover:scale-[1.02] active:scale-95 cursor-pointer"
+                        >
+                          <Download className="w-3.5 h-3.5" />
+                          <span>خروجی JSON</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => jsonImportRef.current?.click()}
+                          className="px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-purple-300 dark:border-purple-800 text-purple-700 dark:text-purple-300 hover:bg-purple-50 dark:hover:bg-purple-950/50 text-xs font-bold flex items-center justify-center gap-1.5 transition-all hover:scale-[1.02] active:scale-95 cursor-pointer"
+                        >
+                          <Upload className="w-3.5 h-3.5" />
+                          <span>ورودی از JSON</span>
+                        </button>
+                      </div>
+
+                      <input
+                        type="file"
+                        ref={jsonImportRef}
+                        onChange={handleSelectJsonFile}
+                        accept=".json,application/json"
+                        className="hidden"
+                        id="admin-json-import-input"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Database Wipe & Factory Reset Section (Red Danger Button) */}
+              <div className="p-5 rounded-2xl bg-red-50/70 dark:bg-red-950/20 border-2 border-red-200 dark:border-red-900/60 shadow-xs space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                  <div className="space-y-1.5 max-w-2xl">
+                    <div className="flex items-center gap-2">
+                      <div className="w-8 h-8 rounded-xl bg-red-500/10 dark:bg-red-500/20 text-red-600 dark:text-red-400 flex items-center justify-center shrink-0">
+                        <AlertTriangle className="w-4 h-4 text-red-600 dark:text-red-400" />
+                      </div>
+                      <h3 className="font-bold text-sm text-red-900 dark:text-red-200 flex items-center gap-2">
+                        <span>پاک‌سازی کامل داده‌ها و ریست دیتابیس (Reset & Wipe)</span>
+                        <span className="px-2 py-0.5 rounded-full bg-red-100 dark:bg-red-900/60 text-red-700 dark:text-red-300 text-[10px] font-bold">
+                          منطقه حساس
+                        </span>
+                      </h3>
+                    </div>
+                    <p className="text-xs text-red-700/90 dark:text-red-300/80 leading-relaxed pr-10">
+                      با زدن دکمه قرمز زیر و تأیید، کلیه برنامه‌ها و دسته‌بندی‌ها به طور کامل پاک شده و تنظیمات دیتابیس به حالت اولیه ریست می‌شود. پس از پاک‌سازی، پایگاه‌داده خالی شده و شما می‌توانید از طریق بارگذاری هر یک از ۳ فرمت فایل پشتیبان (فایل زیپ جامع ZIP، فایل اکسل XLSX، یا فایل JSON) کلیه تنظیمات و اطلاعات را بازگردانید.
+                    </p>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setWipeUploadsOnReset(false);
+                      setShowResetConfirmModal(true);
+                    }}
+                    className="px-5 py-2.5 rounded-xl text-xs font-bold bg-red-600 hover:bg-red-700 text-white shadow-lg shadow-red-600/30 flex items-center justify-center gap-2 shrink-0 cursor-pointer transition-all hover:scale-105 active:scale-95"
+                    id="admin-reset-database-button"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                    <span>پاک‌سازی داده‌ها و ریست دیتابیس</span>
+                  </button>
                 </div>
               </div>
 
@@ -1822,20 +3486,20 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               <div className="p-5 rounded-2xl bg-white/80 dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800 shadow-xs space-y-4">
                 <div className="flex items-center gap-2 font-bold text-sm text-slate-900 dark:text-slate-100">
                   <FileCode2 className="w-4 h-4 text-blue-500" />
-                  <span>Docker & Reverse Proxy Deployment Reference</span>
+                  <span>راهنمای استقرار با داکر و پروکسی معکوس (Nginx)</span>
                 </div>
 
                 <div className="space-y-3 text-xs">
                   <div>
-                    <span className="font-bold text-slate-700 dark:text-slate-300">Docker Run:</span>
-                    <pre className="mt-1 p-3 rounded-xl bg-slate-900 text-slate-100 font-mono text-[11px] overflow-x-auto select-all">
+                    <span className="font-bold text-slate-700 dark:text-slate-300">اجرا با داکر (Docker Run):</span>
+                    <pre className="mt-1 p-3 rounded-xl bg-slate-900 text-slate-100 font-mono text-[11px] overflow-x-auto select-all dir-ltr text-left">
                       docker run -d -p 3000:3000 -v /opt/linxdash/data:/app/data --name linxdash --restart unless-stopped linxdash:latest
                     </pre>
                   </div>
 
                   <div>
-                    <span className="font-bold text-slate-700 dark:text-slate-300">Nginx Reverse Proxy Config:</span>
-                    <pre className="mt-1 p-3 rounded-xl bg-slate-900 text-slate-100 font-mono text-[11px] overflow-x-auto select-all">
+                    <span className="font-bold text-slate-700 dark:text-slate-300">پیکربندی پروکسی معکوس Nginx:</span>
+                    <pre className="mt-1 p-3 rounded-xl bg-slate-900 text-slate-100 font-mono text-[11px] overflow-x-auto select-all dir-ltr text-left">
 {`location / {
     proxy_pass http://127.0.0.1:3000;
     proxy_set_header Host $host;
@@ -1849,242 +3513,554 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               </div>
             </div>
           )}
-
-          {/* 7. AUTOMATED TESTS TAB */}
-          {activeTab === 'tests' && (
-            <div className="space-y-4">
-              <div className="flex items-center justify-between p-4 rounded-2xl bg-white/80 dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800 shadow-xs">
-                <div>
-                  <h3 className="font-bold text-sm text-slate-900 dark:text-slate-100">
-                    Automated Verification Suite
-                  </h3>
-                  <p className="text-xs text-slate-500 dark:text-slate-400">
-                    Runs internal test assertions on auth isolation, SVG XSS sanitation, password hashing, and ETag caching.
-                  </p>
-                </div>
-                <button
-                  id="run-tests-button"
-                  onClick={handleRunTests}
-                  disabled={isRunningTests}
-                  className="px-4 py-2 rounded-xl text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white shadow-sm flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
-                >
-                  <RefreshCw className={`w-4 h-4 ${isRunningTests ? 'animate-spin' : ''}`} />
-                  <span>{isRunningTests ? 'Running Assertions...' : 'Execute Test Suite'}</span>
-                </button>
-              </div>
-
-              {testResults && (
-                <div className="space-y-3">
-                  <div
-                    className={`p-4 rounded-2xl border flex items-center justify-between ${
-                      testResults.success
-                        ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-200'
-                        : 'bg-red-50 dark:bg-red-950/40 border-red-200 dark:border-red-800 text-red-800 dark:text-red-200'
-                    }`}
-                  >
-                    <div className="flex items-center gap-3">
-                      {testResults.success ? (
-                        <CheckCircle2 className="w-6 h-6 text-emerald-600 dark:text-emerald-400" />
-                      ) : (
-                        <XCircle className="w-6 h-6 text-red-600 dark:text-red-400" />
-                      )}
-                      <div>
-                        <h4 className="font-bold text-sm">
-                          {testResults.success ? 'All Test Assertions Passed' : 'Test Suite Failures Detected'}
-                        </h4>
-                        <p className="text-xs opacity-80">
-                          {testResults.tests.length} tests executed against live backend runtime
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="rounded-2xl bg-white/80 dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800 shadow-xs divide-y divide-slate-100 dark:divide-slate-800 overflow-hidden">
-                    {testResults.tests.map((t, idx) => (
-                      <div key={idx} className="p-4 flex items-start justify-between gap-4">
-                        <div className="space-y-1">
-                          <div className="flex items-center gap-2">
-                            {t.passed ? (
-                              <Check className="w-4 h-4 text-emerald-500" />
-                            ) : (
-                              <XCircle className="w-4 h-4 text-red-500" />
-                            )}
-                            <span className="font-bold text-xs text-slate-800 dark:text-slate-200">{t.name}</span>
-                          </div>
-                          <p className="text-[11px] text-slate-500 dark:text-slate-400 pl-6">{t.message}</p>
-                        </div>
-                        <span
-                          className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold ${
-                            t.passed
-                              ? 'bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300'
-                              : 'bg-red-100 dark:bg-red-950 text-red-700 dark:text-red-300'
-                          }`}
-                        >
-                          {t.passed ? 'PASSED' : 'FAILED'}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
         </main>
       </div>
 
       {/* --- EDIT / ADD APPLICATION MODAL --- */}
       {isAppModalOpen && editingApp && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-sm">
-          <div className="relative w-full max-w-xl max-h-[90vh] rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xl overflow-hidden flex flex-col">
-            <div className="flex items-center justify-between p-5 border-b border-slate-100 dark:border-slate-800">
-              <h3 className="font-bold text-base text-slate-900 dark:text-slate-100">
-                {editingApp.id ? 'Edit Application' : 'Add New Application'}
-              </h3>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/65 backdrop-blur-sm animate-in fade-in duration-200" dir="rtl">
+          <div className="relative w-full max-w-xl max-h-[92vh] rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xl overflow-hidden flex flex-col">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 dark:border-slate-800/80 bg-slate-50/50 dark:bg-slate-950/30">
+              <div className="flex items-center gap-3">
+                <div
+                  className="w-10 h-10 rounded-2xl flex items-center justify-center text-white text-xs font-bold shrink-0 shadow-xs transition-colors"
+                  style={{ backgroundColor: editingApp.accentColor || '#2563EB' }}
+                >
+                  <AppIcon icon={editingApp.icon || 'terminal'} className="w-5 h-5 text-white" />
+                </div>
+                <div>
+                  <h3 className="font-black text-base text-slate-900 dark:text-slate-100 leading-tight">
+                    {editingApp.id ? 'ویرایش دکمه' : 'افزودن دکمه جدید'}
+                  </h3>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                    تنظیم نام، نوار آدرس پیوند، دسته‌بندی و ظاهر کارت
+                  </p>
+                </div>
+              </div>
               <button
+                type="button"
                 onClick={() => setIsAppModalOpen(false)}
-                className="p-1 rounded-lg text-slate-400 hover:text-slate-600"
+                className="p-2 rounded-xl text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer transition-colors"
+                title="بستن پنجره"
               >
-                &times;
+                <X className="w-4 h-4" />
               </button>
             </div>
 
-            <form onSubmit={handleSaveApp} className="p-5 flex-1 overflow-y-auto space-y-4 text-xs">
-              <div>
-                <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                  Application Name *
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={editingApp.name || ''}
-                  onChange={(e) => setEditingApp({ ...editingApp, name: e.target.value })}
-                  placeholder="e.g. Grafana, Nextcloud"
-                  className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                />
-              </div>
+            <form onSubmit={handleSaveApp} className="p-5 sm:p-6 flex-1 overflow-y-auto space-y-4 text-xs">
+              {/* 1. Basic Info Section */}
+              <div className="p-4 rounded-2xl bg-slate-50/70 dark:bg-slate-950/50 border border-slate-200/80 dark:border-slate-800/80 space-y-3.5">
+                <div className="flex items-center gap-1.5 text-slate-900 dark:text-slate-100 font-bold text-xs pb-1 border-b border-slate-200/50 dark:border-slate-800/50">
+                  <Tag className="w-3.5 h-3.5 text-blue-500" />
+                  <span>مشخصات و عنوان دکمه</span>
+                </div>
 
-              <div>
-                <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                  Destination URL / UNC Share / File Path *
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={editingApp.url || ''}
-                  onChange={(e) => setEditingApp({ ...editingApp, url: e.target.value })}
-                  placeholder="https://... or \\server\shared\folder or /local/path"
-                  className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 font-mono focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                />
-              </div>
-
-              <div>
-                <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                  Short Description
-                </label>
-                <input
-                  type="text"
-                  value={editingApp.description || ''}
-                  onChange={(e) => setEditingApp({ ...editingApp, description: e.target.value })}
-                  placeholder="e.g. Monitoring & metrics dashboard"
-                  className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                />
-              </div>
-
-              {/* Icon Selector Button */}
-              <div>
-                <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                  Application Icon
-                </label>
-                <div className="flex items-center gap-3">
-                  <div
-                    className="w-10 h-10 rounded-xl bg-slate-100 dark:bg-slate-800 border p-1.5 flex items-center justify-center shrink-0"
-                    style={{ borderColor: editingApp.accentColor }}
-                  >
-                    <AppIcon
-                      icon={editingApp.icon || 'terminal'}
-                      accentColor={editingApp.accentColor}
-                      className="w-6 h-6"
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                      نام دکمه <span className="text-rose-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={editingApp.name || ''}
+                      onChange={(e) => setEditingApp({ ...editingApp, name: e.target.value })}
+                      placeholder="مثال: Proxmox VE یا سامانه تدارکات"
+                      className="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-blue-500 focus:outline-none transition-shadow"
                     />
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => setIsIconPickerOpen(true)}
-                    className="px-3.5 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 font-semibold flex items-center gap-2 cursor-pointer transition-colors"
-                  >
-                    <Sparkles className="w-4 h-4 text-blue-500" />
-                    <span>Choose from 50+ Linux Icons or Upload</span>
-                  </button>
+
+                  <div>
+                    <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                      دسته‌بندی <span className="text-rose-500">*</span>
+                    </label>
+                    <select
+                      value={editingApp.categoryId || (categories[0]?.id ?? 'cat-general')}
+                      onChange={(e) => setEditingApp({ ...editingApp, categoryId: e.target.value })}
+                      className="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 focus:ring-2 focus:ring-blue-500 focus:outline-none text-slate-800 dark:text-slate-200 cursor-pointer transition-shadow"
+                    >
+                      {categories.map((cat) => (
+                        <option key={cat.id} value={cat.id}>
+                          {cat.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                    توضیح کوتاه (اختیاری)
+                  </label>
+                  <input
+                    type="text"
+                    value={editingApp.description || ''}
+                    onChange={(e) => setEditingApp({ ...editingApp, description: e.target.value })}
+                    placeholder="توضیح مختصر عملکرد یا راهنما..."
+                    className="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-blue-500 focus:outline-none transition-shadow"
+                  />
                 </div>
               </div>
 
-              {/* Accent Color */}
-              <div>
-                <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                  Accent Color
-                </label>
-                <div className="flex items-center gap-2">
-                  {['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899', '#06B6D4', '#E57000'].map(
-                    (color) => (
+              {/* 2. Destination & Smart Address Bar */}
+              <div className="p-4 rounded-2xl bg-slate-50/70 dark:bg-slate-950/50 border border-slate-200/80 dark:border-slate-800/80 space-y-3.5">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-1 border-b border-slate-200/50 dark:border-slate-800/50">
+                  <div className="flex items-center gap-1.5 text-slate-900 dark:text-slate-100 font-bold text-xs">
+                    <Link2 className="w-3.5 h-3.5 text-indigo-500" />
+                    <span>عملکرد کلیک روی دکمه</span>
+                  </div>
+
+                  {/* Mode Tabs */}
+                  <div className="flex p-0.5 rounded-xl bg-slate-200/80 dark:bg-slate-800 text-[11px] font-medium self-start sm:self-auto">
+                    <button
+                      type="button"
+                      onClick={() => setAppDestType('url')}
+                      className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer flex items-center gap-1.5 ${
+                        appDestType === 'url'
+                          ? 'bg-white dark:bg-slate-900 text-blue-600 dark:text-blue-400 shadow-xs font-bold'
+                          : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+                      }`}
+                    >
+                      <Globe className="w-3.5 h-3.5" />
+                      <span>آدرس اینترنتی (URL)</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setAppDestType('file')}
+                      className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer flex items-center gap-1.5 ${
+                        appDestType === 'file'
+                          ? 'bg-white dark:bg-slate-900 text-rose-600 dark:text-rose-400 shadow-xs font-bold'
+                          : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+                      }`}
+                    >
+                      <FileText className="w-3.5 h-3.5" />
+                      <span>فایل PDF / سرور</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* THE SMART ADDRESS BAR (Visible in both URL and File mode) */}
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between text-[11px]">
+                    <span className="font-semibold text-slate-700 dark:text-slate-300">
+                      {appDestType === 'url'
+                        ? 'نوار آدرس اینترنتی یا مسیر شبکه:'
+                        : 'نوار آدرس فایل روی سرور (قابل مشاهده و کپی):'}
+                    </span>
+                    <span className="text-[10px] text-slate-400 font-mono">
+                      {appDestType === 'url' ? 'URL Destination' : 'Server File Path'}
+                    </span>
+                  </div>
+
+                  <div className="relative flex items-center rounded-xl bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-800 shadow-2xs focus-within:ring-2 focus-within:ring-blue-500 focus-within:border-blue-500 transition-all p-1">
+                    {/* Leading indicator */}
+                    <div className="px-2.5 py-1 text-slate-400 select-none shrink-0 flex items-center justify-center">
+                      {appDestType === 'url' ? (
+                        <Globe className="w-4 h-4 text-blue-500" />
+                      ) : (
+                        <FileText className="w-4 h-4 text-rose-500" />
+                      )}
+                    </div>
+
+                    {/* Address Text Input */}
+                    <input
+                      type="text"
+                      value={(appDestType === 'file' ? (editingApp.fileUrl || editingApp.url) : editingApp.url) || ''}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        if (appDestType === 'file') {
+                          setEditingApp({ ...editingApp, url: val, fileUrl: val });
+                        } else {
+                          setEditingApp({ ...editingApp, url: val });
+                        }
+                      }}
+                      placeholder={
+                        appDestType === 'url'
+                          ? 'https://example.com یا 192.168.1.100:8006'
+                          : '/uploads/... (با آپلود یا انتخاب فایل تکمیل می‌شود)'
+                      }
+                      dir="ltr"
+                      className="flex-1 bg-transparent border-0 px-2 py-1.5 font-mono text-xs text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-0 text-left selection:bg-blue-500 selection:text-white"
+                    />
+
+                    {/* In-bar Actions: External Test link & Copy Button */}
+                    <div className="flex items-center gap-1 shrink-0 pl-1">
+                      {((appDestType === 'file' ? (editingApp.fileUrl || editingApp.url) : editingApp.url)?.trim()) && (
+                        <a
+                          href={(appDestType === 'file' ? (editingApp.fileUrl || editingApp.url) : editingApp.url)?.trim()}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="p-1.5 rounded-lg text-slate-500 hover:text-blue-600 dark:text-slate-400 dark:hover:text-blue-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                          title="تست و باز کردن پیوند در برگه جدید"
+                        >
+                          <ExternalLink className="w-3.5 h-3.5" />
+                        </a>
+                      )}
+
                       <button
-                        key={color}
                         type="button"
-                        onClick={() => setEditingApp({ ...editingApp, accentColor: color })}
-                        className={`w-6 h-6 rounded-full transition-transform ${
-                          editingApp.accentColor === color ? 'scale-125 ring-2 ring-blue-500' : ''
+                        onClick={handleCopyModalUrl}
+                        disabled={!((appDestType === 'file' ? (editingApp.fileUrl || editingApp.url) : editingApp.url)?.trim())}
+                        title="کپی کردن این آدرس در حافظه موقت (کلیپ‌بورد)"
+                        className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer select-none ${
+                          isModalUrlCopied
+                            ? 'bg-emerald-600 text-white shadow-xs'
+                            : ((appDestType === 'file' ? (editingApp.fileUrl || editingApp.url) : editingApp.url)?.trim())
+                            ? 'bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200'
+                            : 'opacity-40 cursor-not-allowed bg-slate-100 dark:bg-slate-800 text-slate-400'
                         }`}
-                        style={{ backgroundColor: color }}
+                      >
+                        {isModalUrlCopied ? (
+                          <>
+                            <Check className="w-3.5 h-3.5" />
+                            <span>کپی شد!</span>
+                          </>
+                        ) : (
+                          <>
+                            <Copy className="w-3.5 h-3.5" />
+                            <span>کپی آدرس</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                {/* File Upload Controls & Preview (Only when File mode is active) */}
+                {appDestType === 'file' && (
+                  <div className="space-y-3 pt-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <input
+                        type="file"
+                        ref={appDocumentInputRef}
+                        onChange={handleUploadAppDocument}
+                        accept=".pdf,application/pdf,.doc,.docx,.xls,.xlsx,.txt,.md,.png,.jpg,.jpeg"
+                        className="hidden"
                       />
-                    )
-                  )}
-                  <input
-                    type="color"
-                    value={editingApp.accentColor || '#3B82F6'}
-                    onChange={(e) => setEditingApp({ ...editingApp, accentColor: e.target.value })}
-                    className="w-7 h-7 rounded-lg border cursor-pointer p-0 bg-transparent"
-                  />
+                      <button
+                        type="button"
+                        onClick={() => appDocumentInputRef.current?.click()}
+                        disabled={isUploadingAppDoc}
+                        className="flex-1 py-2 px-3 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold flex items-center justify-center gap-2 transition-all cursor-pointer disabled:opacity-50 shadow-xs active:scale-98"
+                      >
+                        <Upload className={`w-3.5 h-3.5 ${isUploadingAppDoc ? 'animate-bounce' : ''}`} />
+                        <span>{isUploadingAppDoc ? 'در حال آپلود و ذخیره فایل...' : 'آپلود فایل جدید روی سرور'}</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleOpenServerDocsModal}
+                        className="py-2 px-3.5 rounded-xl bg-white dark:bg-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-800 font-semibold flex items-center gap-1.5 transition-all cursor-pointer shadow-2xs"
+                      >
+                        <Folder className="w-3.5 h-3.5 text-amber-500" />
+                        <span>فایل‌های سرور</span>
+                      </button>
+                    </div>
+
+                    {/* If a file is uploaded or linked, show card */}
+                    {(editingApp.fileUrl || (editingApp.url && (editingApp.url.startsWith('/uploads/') || editingApp.url.toLowerCase().endsWith('.pdf')))) ? (
+                      <div className="p-3 rounded-xl bg-rose-50/90 dark:bg-rose-950/30 border border-rose-200/80 dark:border-rose-900/50 flex items-center justify-between gap-3">
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <div className="w-9 h-9 rounded-lg bg-rose-500/15 text-rose-600 dark:text-rose-400 flex items-center justify-center shrink-0">
+                            <FileText className="w-4 h-4" />
+                          </div>
+                          <div className="min-w-0">
+                            <p className="text-xs font-bold text-slate-900 dark:text-white truncate">
+                              {editingApp.fileName || (editingApp.fileUrl || editingApp.url).split('/').pop()}
+                            </p>
+                            <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold flex items-center gap-1 mt-0.5">
+                              <CheckCircle2 className="w-3 h-3" />
+                              فایل روی سرور قرار دارد و آدرس آن در نوار بالا ثبت شده است
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-1 shrink-0">
+                          <a
+                            href={editingApp.fileUrl || editingApp.url}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="p-1.5 rounded-lg bg-white dark:bg-slate-900 text-rose-600 hover:bg-rose-100 dark:hover:bg-rose-950 transition-colors shadow-2xs"
+                            title="مشاهده مستقیم فایل"
+                          >
+                            <ExternalLink className="w-3.5 h-3.5" />
+                          </a>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setEditingApp({
+                                ...editingApp,
+                                fileUrl: undefined,
+                                fileName: undefined,
+                                url: ''
+                              });
+                            }}
+                            className="p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-white dark:hover:bg-slate-900 transition-colors cursor-pointer"
+                            title="حذف فایل از دکمه"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <p className="text-[11px] text-slate-400 leading-relaxed">
+                        با آپلود فایل یا انتخاب از آرشیو سرور، آدرس فایل به صورت خودکار در نوار بالا قرار گرفته و می‌توانید آن را کپی نمایید.
+                      </p>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* 3. Icon, Custom Image & Color Palette Section */}
+              <div
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  setIsIconSectionDragOver(true);
+                }}
+                onDragLeave={() => setIsIconSectionDragOver(false)}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  setIsIconSectionDragOver(false);
+                  const file = e.dataTransfer.files?.[0];
+                  if (file) handleDirectIconUpload(file);
+                }}
+                className={`p-4 rounded-2xl bg-slate-50/70 dark:bg-slate-950/50 border space-y-3.5 transition-all ${
+                  isIconSectionDragOver
+                    ? 'border-blue-500 bg-blue-50/40 dark:bg-blue-950/30 ring-2 ring-blue-500/20'
+                    : 'border-slate-200/80 dark:border-slate-800/80'
+                }`}
+              >
+                {/* Header & Action Buttons */}
+                <div className="flex items-center justify-between pb-2 border-b border-slate-200/60 dark:border-slate-800/60 gap-2 flex-wrap">
+                  <div className="flex items-center gap-1.5 text-slate-900 dark:text-slate-100 font-bold text-xs">
+                    <Palette className="w-3.5 h-3.5 text-purple-500" />
+                    <span>آیکون و رنگ سازمانی (۱۰ تم متمایز)</span>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    {/* Hidden Direct File Input for Custom Image */}
+                    <input
+                      type="file"
+                      ref={iconDirectInputRef}
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) handleDirectIconUpload(file);
+                      }}
+                      accept="image/png,image/jpeg,image/jpg,image/webp,image/svg+xml"
+                      className="hidden"
+                      id="app-icon-direct-input"
+                    />
+
+                    {/* Direct Upload Button */}
+                    <button
+                      type="button"
+                      onClick={() => iconDirectInputRef.current?.click()}
+                      disabled={isUploadingIconDirect}
+                      className="px-3 py-1.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/50 dark:hover:bg-emerald-900/60 text-emerald-700 dark:text-emerald-300 font-bold text-xs flex items-center gap-1.5 transition-all cursor-pointer shadow-2xs hover:shadow-xs disabled:opacity-50"
+                      title="آپلود تصویر عکس یا فایل PNG شفاف (بدون پس‌زمینه) یا JPG به جای آیکون"
+                    >
+                      <Upload className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+                      <span>{isUploadingIconDirect ? 'در حال آپلود...' : 'آپلود عکس (PNG شفاف / JPG)'}</span>
+                    </button>
+
+                    {/* Icon Library Modal Button */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIconPickerInitialTab('builtin');
+                        setIsIconPickerOpen(true);
+                      }}
+                      className="px-3 py-1.5 rounded-xl bg-blue-50 hover:bg-blue-100 dark:bg-blue-950/50 dark:hover:bg-blue-900/60 text-blue-600 dark:text-blue-400 font-bold text-xs flex items-center gap-1.5 transition-all cursor-pointer shadow-2xs hover:shadow-xs"
+                      title="انتخاب از بین بیش از ۵۰ آیکون آماده لینوکس و هوم‌لب"
+                    >
+                      <Sparkles className="w-3.5 h-3.5 text-blue-500" />
+                      <span>کتابخانه آیکون‌ها</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Active Icon / Custom Image Card */}
+                {editingApp.icon && (editingApp.icon.startsWith('/uploads/') || editingApp.icon.startsWith('http') || editingApp.icon.startsWith('data:')) ? (
+                  /* Custom Uploaded Image View (with Transparency Checkerboard) */
+                  <div className="p-3 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 flex items-center justify-between gap-3 shadow-2xs">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div
+                        className="w-11 h-11 rounded-xl border border-slate-300 dark:border-slate-700 p-1.5 shrink-0 flex items-center justify-center overflow-hidden shadow-2xs"
+                        style={{
+                          backgroundImage: `linear-gradient(45deg, #cbd5e1 25%, transparent 25%), linear-gradient(-45deg, #cbd5e1 25%, transparent 25%), linear-gradient(45deg, transparent 75%, #cbd5e1 75%), linear-gradient(-45deg, transparent 75%, #cbd5e1 75%)`,
+                          backgroundSize: '10px 10px',
+                          backgroundPosition: '0 0, 0 5px, 5px -5px, -5px 0px',
+                          backgroundColor: '#f8fafc'
+                        }}
+                        title="پیش‌نمایش تصویر با شبکه شطرنجی شفافیت"
+                      >
+                        <img
+                          src={editingApp.icon}
+                          alt="Custom icon"
+                          className="w-full h-full object-contain"
+                          referrerPolicy="no-referrer"
+                        />
+                      </div>
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-bold text-slate-800 dark:text-slate-200">
+                            عکس سفارشی اختصاص‌داده‌شده
+                          </span>
+                          <span className="px-2 py-0.5 rounded-md bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 text-[10px] font-semibold">
+                            PNG شفاف / JPG
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-slate-500 dark:text-slate-400 font-mono truncate mt-0.5" dir="ltr">
+                          {editingApp.icon}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => iconDirectInputRef.current?.click()}
+                        className="px-2.5 py-1 rounded-lg text-xs font-semibold bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 transition-colors cursor-pointer"
+                      >
+                        تعویض تصویر
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setEditingApp({ ...editingApp, icon: 'terminal' })}
+                        className="p-1.5 rounded-lg text-red-500 hover:bg-red-50 dark:hover:bg-red-950/50 transition-colors cursor-pointer"
+                        title="حذف تصویر و بازگشت به آیکون پیش‌فرض"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  /* Standard System Icon View */
+                  <div className="p-3 rounded-xl bg-white/70 dark:bg-slate-900/70 border border-slate-200/80 dark:border-slate-800/80 flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-3">
+                      <div
+                        className="w-10 h-10 rounded-xl border flex items-center justify-center shrink-0 shadow-2xs"
+                        style={{
+                          backgroundColor: `${editingApp.accentColor || '#2563EB'}15`,
+                          borderColor: `${editingApp.accentColor || '#2563EB'}40`,
+                          color: editingApp.accentColor || '#2563EB'
+                        }}
+                      >
+                        <AppIcon icon={editingApp.icon || 'terminal'} accentColor={editingApp.accentColor} className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-bold text-slate-800 dark:text-slate-200">
+                            آیکون سیستمی فعال: {editingApp.icon || 'terminal'}
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                          می‌توانید به جای این آیکون، تصویر لوگوی سازمانی خود را (PNG شفاف یا JPG) بارگذاری نمایید.
+                        </p>
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => iconDirectInputRef.current?.click()}
+                      className="px-2.5 py-1 rounded-lg text-xs font-semibold text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/60 transition-colors cursor-pointer shrink-0"
+                    >
+                      آپلود عکس
+                    </button>
+                  </div>
+                )}
+
+                {/* 10 Distinct Theme Colors */}
+                <div className="flex items-center gap-2.5 flex-wrap pt-1">
+                  {[
+                    '#2563EB', // آبی کلاسیک
+                    '#0D9488', // فیروزه‌ای
+                    '#059669', // سبز زمردی
+                    '#E11D48', // قرمز رزی
+                    '#D97706', // کهربایی / نارنجی
+                    '#7C3AED', // بنفش
+                    '#DB2777', // سرخابی / صورتی
+                    '#0284C7', // آبی آسمانی
+                    '#475569', // خاکستری زغالی
+                    '#4F46E5', // سرمه‌ای نیلی
+                  ].map((color) => (
+                    <button
+                      key={color}
+                      type="button"
+                      onClick={() => setEditingApp({ ...editingApp, accentColor: color })}
+                      className={`w-7 h-7 rounded-full transition-all cursor-pointer border-2 ${
+                        (editingApp.accentColor?.toLowerCase() === color.toLowerCase())
+                          ? 'scale-115 border-white dark:border-slate-900 ring-2 ring-blue-500 shadow-md'
+                          : 'border-transparent hover:scale-110 shadow-2xs'
+                      }`}
+                      style={{ backgroundColor: color }}
+                    />
+                  ))}
+                  <div className="flex items-center gap-1.5 pr-2 border-r border-slate-200 dark:border-slate-800">
+                    <input
+                      type="color"
+                      value={editingApp.accentColor || '#2563EB'}
+                      onChange={(e) => setEditingApp({ ...editingApp, accentColor: e.target.value })}
+                      className="w-7 h-7 rounded-lg border border-slate-300 dark:border-slate-700 cursor-pointer p-0 bg-transparent"
+                      title="انتخاب رنگ دلخواه"
+                    />
+                    <span className="text-[10px] text-slate-400">دلخواه</span>
+                  </div>
                 </div>
               </div>
 
-              {/* Options & Status */}
-              <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-950/60 border border-slate-200/80 dark:border-slate-800/80 space-y-2.5">
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={editingApp.isEnabled !== false}
-                    onChange={(e) => setEditingApp({ ...editingApp, isEnabled: e.target.checked })}
-                    className="rounded text-blue-600 focus:ring-blue-500"
-                  />
-                  <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">
-                    Enable Button on Public Dashboard (Uncheck to temporarily hide)
-                  </span>
-                </label>
-
-                <label className="flex items-center gap-2 cursor-pointer">
+              {/* 4. Display Settings Section */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1">
+                <label className="p-3 rounded-xl bg-slate-50/70 dark:bg-slate-950/50 border border-slate-200/80 dark:border-slate-800/80 flex items-center gap-2.5 cursor-pointer hover:bg-slate-100/70 dark:hover:bg-slate-900/60 transition-colors">
                   <input
                     type="checkbox"
                     checked={editingApp.openInNewTab !== false}
                     onChange={(e) => setEditingApp({ ...editingApp, openInNewTab: e.target.checked })}
-                    className="rounded text-blue-600 focus:ring-blue-500"
+                    className="rounded text-blue-600 focus:ring-blue-500 w-4 h-4 cursor-pointer"
                   />
-                  <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">
-                    Open in new browser tab when clicked
-                  </span>
+                  <div>
+                    <span className="font-semibold text-slate-800 dark:text-slate-200 block">
+                      باز شدن در برگه جدید
+                    </span>
+                    <span className="text-[10px] text-slate-400 block mt-0.5">
+                      صفحه پیوند در تب مجزای مرورگر باز شود
+                    </span>
+                  </div>
+                </label>
+
+                <label className="p-3 rounded-xl bg-slate-50/70 dark:bg-slate-950/50 border border-slate-200/80 dark:border-slate-800/80 flex items-center gap-2.5 cursor-pointer hover:bg-slate-100/70 dark:hover:bg-slate-900/60 transition-colors">
+                  <input
+                    type="checkbox"
+                    checked={editingApp.isEnabled !== false}
+                    onChange={(e) => setEditingApp({ ...editingApp, isEnabled: e.target.checked })}
+                    className="rounded text-emerald-600 focus:ring-emerald-500 w-4 h-4 cursor-pointer"
+                  />
+                  <div>
+                    <span className="font-semibold text-slate-800 dark:text-slate-200 block">
+                      فعال در صفحه اصلی
+                    </span>
+                    <span className="text-[10px] text-slate-400 block mt-0.5">
+                      کارت برای تمامی کاربران قابل مشاهده باشد
+                    </span>
+                  </div>
                 </label>
               </div>
 
-              <div className="flex justify-end gap-2 pt-2">
+              {/* Modal Actions Footer */}
+              <div className="flex items-center justify-end gap-2.5 pt-4 border-t border-slate-200/80 dark:border-slate-800">
                 <button
                   type="button"
                   onClick={() => setIsAppModalOpen(false)}
-                  className="px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-semibold"
+                  className="px-5 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-bold cursor-pointer transition-colors"
                 >
-                  Cancel
+                  انصراف
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold cursor-pointer"
+                  className="px-6 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold cursor-pointer transition-colors shadow-sm flex items-center gap-2 active:scale-98"
                 >
-                  Save Application
+                  <Check className="w-4 h-4" />
+                  <span>ذخیره تغییرات</span>
                 </button>
               </div>
             </form>
@@ -2094,14 +4070,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
       {/* --- EDIT / ADD USER MODAL --- */}
       {isUserModalOpen && editingUser && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-sm">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-sm" dir="rtl">
           <div className="relative w-full max-w-md rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xl p-6">
             <h3 className="font-bold text-base text-slate-900 dark:text-slate-100 mb-4">
-              {editingUser.id ? 'Edit User' : 'Create User'}
+              {editingUser.id ? 'ویرایش کاربر' : 'ایجاد کاربر جدید'}
             </h3>
             <form onSubmit={handleSaveUser} className="space-y-4 text-xs">
               <div>
-                <label className="block font-semibold mb-1">Username *</label>
+                <label className="block font-semibold mb-1">نام کاربری *</label>
                 <input
                   type="text"
                   required
@@ -2113,28 +4089,24 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
               <div>
                 <label className="block font-semibold mb-1">
-                  {editingUser.id ? 'New Password (Leave blank to keep current)' : 'Password *'}
+                  {editingUser.id ? 'رمز عبور جدید (برای حفظ رمز قبلی خالی بگذارید)' : 'رمز عبور *'}
                 </label>
                 <input
                   type="password"
                   required={!editingUser.id}
                   value={editingUser.password || ''}
                   onChange={(e) => setEditingUser({ ...editingUser, password: e.target.value })}
-                  placeholder="Minimum 6 characters"
+                  placeholder="حداقل ۶ کاراکتر"
                   className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 focus:ring-2 focus:ring-blue-500 focus:outline-none"
                 />
               </div>
 
               <div>
-                <label className="block font-semibold mb-1">Role</label>
-                <select
-                  value={editingUser.role || 'private_user'}
-                  onChange={(e) => setEditingUser({ ...editingUser, role: e.target.value as any })}
-                  className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                >
-                  <option value="private_user">Private User (Standard Services View)</option>
-                  <option value="admin">Administrator (Full Access Control Panel)</option>
-                </select>
+                <label className="block font-semibold mb-1">نقش کاربری</label>
+                <div className="w-full px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 text-xs font-semibold flex items-center justify-between">
+                  <span>مدیر سیستم (دسترسی کامل به پنل مدیریت)</span>
+                  <span className="px-2 py-0.5 rounded bg-purple-500/10 text-purple-600 dark:text-purple-400 text-[11px] font-mono">admin</span>
+                </div>
               </div>
 
               <div className="flex items-center gap-2">
@@ -2145,8 +4117,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   onChange={(e) => setEditingUser({ ...editingUser, isActive: e.target.checked })}
                   className="rounded text-blue-600 focus:ring-blue-500"
                 />
-                <label htmlFor="user-active-checkbox" className="font-semibold text-slate-700 dark:text-slate-300">
-                  Account Active & Allowed to Sign In
+                <label htmlFor="user-active-checkbox" className="font-semibold text-slate-700 dark:text-slate-300 cursor-pointer">
+                  حساب کاربری فعال است و امکان ورود دارد
                 </label>
               </div>
 
@@ -2154,15 +4126,79 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 <button
                   type="button"
                   onClick={() => setIsUserModalOpen(false)}
-                  className="px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-semibold"
+                  className="px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-semibold cursor-pointer"
                 >
-                  Cancel
+                  انصراف
                 </button>
                 <button
                   type="submit"
                   className="px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold cursor-pointer"
                 >
-                  Save User
+                  ذخیره مدیر
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* --- EDIT / ADD CATEGORY MODAL --- */}
+      {isCategoryModalOpen && editingCategory && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-sm" dir="rtl">
+          <div className="relative w-full max-w-md rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xl overflow-hidden flex flex-col">
+            <div className="flex items-center justify-between p-5 border-b border-slate-100 dark:border-slate-800">
+              <h3 className="font-bold text-base text-slate-900 dark:text-slate-100">
+                {editingCategory.id ? 'ویرایش دسته‌بندی' : 'افزودن دسته‌بندی جدید'}
+              </h3>
+              <button
+                onClick={() => setIsCategoryModalOpen(false)}
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-600 cursor-pointer text-xl leading-none"
+              >
+                &times;
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveCategory} className="p-5 space-y-4 text-xs">
+              <div>
+                <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                  نام دسته‌بندی *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={editingCategory.name || ''}
+                  onChange={(e) => setEditingCategory({ ...editingCategory, name: e.target.value })}
+                  placeholder="مثلاً رسانه و استریم، شبکه، ابزارها"
+                  className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                  توضیح کوتاه (اختیاری)
+                </label>
+                <input
+                  type="text"
+                  value={editingCategory.description || ''}
+                  onChange={(e) => setEditingCategory({ ...editingCategory, description: e.target.value })}
+                  placeholder="توضیح مختصر درباره برنامه‌های این دسته"
+                  className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setIsCategoryModalOpen(false)}
+                  className="px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-semibold cursor-pointer"
+                >
+                  انصراف
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold cursor-pointer"
+                >
+                  ذخیره دسته‌بندی
                 </button>
               </div>
             </form>
@@ -2176,8 +4212,352 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           currentIcon={editingApp.icon || 'terminal'}
           onSelectIcon={(newIcon) => setEditingApp({ ...editingApp, icon: newIcon })}
           onClose={() => setIsIconPickerOpen(false)}
+          initialTab={iconPickerInitialTab}
         />
       )}
+
+      {/* --- SERVER DOCUMENTS & MEDIA LIBRARY MODAL --- */}
+      {serverDocsModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-sm" dir="rtl">
+          <div className="relative w-full max-w-2xl max-h-[85vh] rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xl overflow-hidden flex flex-col">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between p-5 border-b border-slate-100 dark:border-slate-800">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-blue-500/10 text-blue-600 dark:text-blue-400 flex items-center justify-center">
+                  <FileText className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-base text-slate-900 dark:text-slate-100">
+                    اسناد و فایل‌های سرور
+                  </h3>
+                  <p className="text-[11px] text-slate-400">
+                    فایل‌های آپلود شده در سرور جهت نمایش مستقیم بدون دانلود
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setServerDocsModalOpen(false)}
+                className="p-1.5 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer text-lg leading-none"
+              >
+                &times;
+              </button>
+            </div>
+
+            {/* Modal Controls & Search */}
+            <div className="p-4 border-b border-slate-100 dark:border-slate-800/60 bg-slate-50/50 dark:bg-slate-950/30 flex flex-col sm:flex-row gap-3 items-center justify-between">
+              <div className="relative w-full sm:w-72">
+                <Search className="w-4 h-4 text-slate-400 absolute right-3 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  value={docSearchQuery}
+                  onChange={(e) => setDocSearchQuery(e.target.value)}
+                  placeholder="جستجوی فایل یا پسوند..."
+                  className="w-full pr-9 pl-3 py-1.5 rounded-xl text-xs bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+                />
+              </div>
+
+              <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
+                <button
+                  type="button"
+                  onClick={() => appDocumentInputRef.current?.click()}
+                  disabled={isUploadingAppDoc}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white shadow-sm transition-all cursor-pointer disabled:opacity-50"
+                >
+                  <Upload className={`w-3.5 h-3.5 ${isUploadingAppDoc ? 'animate-bounce' : ''}`} />
+                  <span>{isUploadingAppDoc ? 'در حال ارسال...' : 'آپلود فایل جدید'}</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={loadServerDocs}
+                  className="p-1.5 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-200/60 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+                  title="تازه‌سازی لیست"
+                >
+                  <RefreshCw className={`w-4 h-4 ${isLoadingDocs ? 'animate-spin text-blue-500' : ''}`} />
+                </button>
+              </div>
+            </div>
+
+            {/* Modal Files List */}
+            <div className="flex-1 overflow-y-auto p-4 space-y-2.5">
+              {isLoadingDocs ? (
+                <div className="flex flex-col items-center justify-center py-12 text-slate-400 gap-2">
+                  <RefreshCw className="w-6 h-6 animate-spin text-blue-500" />
+                  <span className="text-xs">در حال بارگذاری لیست اسناد سرور...</span>
+                </div>
+              ) : (
+                (() => {
+                  const filtered = serverDocsList.filter(
+                    (d) =>
+                      d.filename.toLowerCase().includes(docSearchQuery.toLowerCase()) ||
+                      d.ext.toLowerCase().includes(docSearchQuery.toLowerCase())
+                  );
+
+                  if (filtered.length === 0) {
+                    return (
+                      <div className="flex flex-col items-center justify-center py-12 text-center text-slate-400">
+                        <FileText className="w-12 h-12 stroke-[1.2] mb-3 text-slate-300 dark:text-slate-700" />
+                        <p className="text-sm font-semibold text-slate-600 dark:text-slate-300">
+                          {docSearchQuery ? 'فایلی با این نام یافت نشد' : 'هنوز فایلی در سرور آپلود نشده است'}
+                        </p>
+                        <p className="text-xs mt-1 text-slate-400">
+                          با دکمه «آپلود فایل جدید» می‌توانید فایل‌های PDF یا اسناد خود را اضافه نمایید.
+                        </p>
+                      </div>
+                    );
+                  }
+
+                  return filtered.map((doc) => {
+                    const extUpper = doc.ext.toUpperCase();
+                    const sizeFormatted =
+                      doc.size > 1024 * 1024
+                        ? `${(doc.size / (1024 * 1024)).toFixed(1)} مگابایت`
+                        : `${Math.round(doc.size / 1024)} کیلوبایت`;
+
+                    return (
+                      <div
+                        key={doc.filename}
+                        className="group flex flex-col sm:flex-row sm:items-center justify-between p-3 rounded-2xl border border-slate-200/70 dark:border-slate-800/80 bg-white dark:bg-slate-900/60 hover:border-blue-500/30 hover:bg-blue-50/20 dark:hover:bg-blue-950/20 transition-all gap-3"
+                      >
+                        <div className="flex items-center gap-3 overflow-hidden">
+                          <div className="w-10 h-10 rounded-xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center flex-shrink-0 font-bold text-xs text-blue-600 dark:text-blue-400 border border-slate-200/50 dark:border-slate-700/50">
+                            {extUpper || 'DOC'}
+                          </div>
+                          <div className="min-w-0">
+                            <p className="text-xs font-bold text-slate-800 dark:text-slate-200 truncate dir-ltr text-right">
+                              {doc.filename}
+                            </p>
+                            <div className="flex items-center gap-3 mt-0.5 text-[11px] text-slate-400">
+                              <span>{sizeFormatted}</span>
+                              <span>•</span>
+                              <span className="dir-ltr text-right">{new Date(doc.createdAt).toLocaleDateString('fa-IR')}</span>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-1.5 justify-end flex-shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-100 dark:border-slate-800">
+                          <a
+                            href={doc.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-semibold text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
+                            title="مشاهده مستقیم در تب جدید"
+                          >
+                            <ExternalLink className="w-3.5 h-3.5" />
+                            <span>مشاهده</span>
+                          </a>
+
+                          {editingApp ? (
+                            <button
+                              type="button"
+                              onClick={() => handleSelectDocForApp(doc)}
+                              className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-semibold text-blue-600 dark:text-blue-400 bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/20 transition-colors cursor-pointer"
+                            >
+                              <Check className="w-3.5 h-3.5" />
+                              <span>انتخاب برای کارت</span>
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => handleCreateAppFromDoc(doc)}
+                              className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-semibold text-rose-600 dark:text-rose-400 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/20 transition-colors cursor-pointer"
+                              title="ایجاد دکمه اختصاصی برای این فایل در صفحه اصلی"
+                            >
+                              <Plus className="w-3.5 h-3.5" />
+                              <span>ایجاد دکمه در داشبورد</span>
+                            </button>
+                          )}
+
+                          <button
+                            type="button"
+                            onClick={() => {
+                              navigator.clipboard.writeText(window.location.origin + doc.url);
+                              showNotification('آدرس فایل در کلیپ‌بورد کپی شد');
+                            }}
+                            className="p-1.5 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+                            title="کپی پیوند فایل"
+                          >
+                            <Copy className="w-3.5 h-3.5" />
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteServerDoc(doc.filename)}
+                            className="p-1.5 rounded-xl text-rose-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition-colors cursor-pointer"
+                            title="حذف از سرور"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  });
+                })()
+              )}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-4 border-t border-slate-100 dark:border-slate-800 flex justify-between items-center bg-slate-50/50 dark:bg-slate-950/30">
+              <span className="text-[11px] text-slate-400 font-medium">
+                تعداد فایل‌های سرور: {serverDocsList.length}
+              </span>
+              <button
+                type="button"
+                onClick={() => setServerDocsModalOpen(false)}
+                className="px-4 py-1.5 rounded-xl bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-xs font-semibold hover:bg-slate-300 dark:hover:bg-slate-700 transition-colors cursor-pointer"
+              >
+                بستن
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* --- EXCEL & JSON IMPORT PREVIEW MODAL --- */}
+      {importPreview && (
+        <ImportPreviewModal
+          isOpen={true}
+          onClose={() => setImportPreview(null)}
+          fileType={importPreview.fileType}
+          fileName={importPreview.fileName}
+          parsed={importPreview.parsed}
+          existingCategories={categories}
+          isApplying={isApplyingImport}
+          onConfirm={handleConfirmImport}
+        />
+      )}
+
+      {/* --- RESET / WIPE CONFIRMATION MODAL --- */}
+      {showResetConfirmModal && (
+        <div
+          className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200"
+          id="admin-reset-confirm-modal"
+        >
+          <div className="bg-white dark:bg-slate-900 rounded-2xl max-w-md w-full border border-red-200 dark:border-red-900/80 shadow-2xl overflow-hidden text-right">
+            {/* Modal Header */}
+            <div className="p-4 bg-red-500/10 dark:bg-red-500/15 border-b border-red-100 dark:border-red-900/40 flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-red-600 text-white flex items-center justify-center shrink-0 shadow-sm shadow-red-600/30">
+                  <AlertTriangle className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-sm text-red-950 dark:text-red-200">
+                    تأیید پاک‌سازی و بازنشانی دیتابیس
+                  </h3>
+                  <span className="text-[11px] text-red-700 dark:text-red-400">
+                    عملیات غیرقابل برگشت (مگر با بازگردانی فایل پشتیبان)
+                  </span>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => !isResetting && setShowResetConfirmModal(false)}
+                disabled={isResetting}
+                className="w-7 h-7 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center justify-center cursor-pointer transition-colors disabled:opacity-50"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-5 space-y-4 text-xs">
+              <div className="p-3.5 rounded-xl bg-red-50 dark:bg-red-950/40 border border-red-200/80 dark:border-red-900/50 space-y-2">
+                <p className="font-bold text-red-800 dark:text-red-300 leading-relaxed">
+                  آیا اطمینان دارید که می‌خواهید تمام داده‌های پایگاه‌داده را پاک کنید؟
+                </p>
+                <ul className="list-disc list-inside space-y-1 text-red-700/90 dark:text-red-400/90 text-[11px]">
+                  <li>
+                    تعداد <strong className="font-bold text-red-900 dark:text-red-200">{toPersianDigits(applications.length)}</strong> برنامه و <strong className="font-bold text-red-900 dark:text-red-200">{toPersianDigits(categories.length)}</strong> دسته‌بندی حذف خواهند شد.
+                  </li>
+                  <li>کلیه تنظیمات ظاهری، چیدمان و داشبورد به مقادیر پیش‌فرض ریست می‌شوند.</li>
+                  <li>حساب کاربری مدیریت شما جهت امکان دسترسی مجدد حفظ خواهد شد.</li>
+                </ul>
+              </div>
+
+              <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700/60 space-y-2">
+                <div className="text-[11px] text-slate-600 dark:text-slate-400 leading-relaxed font-medium">
+                  پس از این پاک‌سازی، می‌توانید فوراً با بارگذاری هر کدام از موارد زیر، کلیه تنظیمات و برنامه‌ها را بازگردانی نمایید:
+                </div>
+                <div className="grid grid-cols-3 gap-2 text-[10px] text-center font-bold">
+                  <div className="p-1.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-purple-600 dark:text-purple-400">
+                    فایل جامع ZIP
+                  </div>
+                  <div className="p-1.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-emerald-600 dark:text-emerald-400">
+                    فایل اکسل XLSX
+                  </div>
+                  <div className="p-1.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-indigo-600 dark:text-indigo-400">
+                    فایل متنی JSON
+                  </div>
+                </div>
+              </div>
+
+              <label className="flex items-start gap-2.5 p-3 rounded-xl border border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/40 cursor-pointer transition-colors select-none">
+                <input
+                  type="checkbox"
+                  checked={wipeUploadsOnReset}
+                  onChange={(e) => setWipeUploadsOnReset(e.target.checked)}
+                  disabled={isResetting}
+                  className="mt-0.5 w-4 h-4 text-red-600 rounded border-slate-300 focus:ring-red-500"
+                />
+                <div className="space-y-0.5">
+                  <span className="font-bold text-slate-800 dark:text-slate-200 text-xs">
+                    پاک‌سازی پوشه فایل‌های آپلودشده (Uploads)
+                  </span>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                    شامل آیکون‌ها، تصاویر پس‌زمینه و فایل‌های ضمیمه ذخیره‌شده روی سرور. (اگر فایل ZIP دارید، همه آنها قابل بازیابی هستند).
+                  </p>
+                </div>
+              </label>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-4 border-t border-slate-100 dark:border-slate-800 flex justify-end items-center gap-2.5 bg-slate-50/50 dark:bg-slate-950/30">
+              <button
+                type="button"
+                disabled={isResetting}
+                onClick={() => setShowResetConfirmModal(false)}
+                className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 dark:text-slate-400 hover:bg-slate-200/70 dark:hover:bg-slate-800 transition-colors cursor-pointer disabled:opacity-50"
+              >
+                انصراف
+              </button>
+
+              <button
+                type="button"
+                disabled={isResetting}
+                onClick={handleResetDatabase}
+                className="px-5 py-2 rounded-xl text-xs font-bold bg-red-600 hover:bg-red-700 text-white shadow-md shadow-red-600/30 flex items-center gap-2 cursor-pointer transition-all hover:scale-105 active:scale-95 disabled:opacity-50"
+                id="admin-confirm-reset-button"
+              >
+                {isResetting ? (
+                  <>
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                    <span>در حال پاک‌سازی و بازنشانی...</span>
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>تأیید و پاک‌سازی کامل داده‌ها</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Footer */}
+      <footer className="w-full border-t border-slate-200/80 dark:border-white/10 bg-white/70 dark:bg-slate-900/70 px-4 sm:px-8 py-3.5 mt-auto relative z-10">
+        <div className="max-w-7xl mx-auto flex items-center justify-between text-xs text-slate-500 dark:text-slate-400 font-medium">
+          <span className="font-semibold text-slate-700 dark:text-slate-300" dir="ltr">
+            Developed by : N.Shaaeri
+          </span>
+          <button
+            onClick={onNavigateHome}
+            className="text-blue-600 dark:text-blue-400 hover:underline transition-colors cursor-pointer font-bold text-[11px]"
+          >
+            مشاهده صفحه عمومی
+          </button>
+        </div>
+      </footer>
     </div>
   );
 };

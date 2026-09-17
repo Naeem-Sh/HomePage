@@ -1,4 +1,4 @@
-export type UserRole = 'admin' | 'private_user';
+export type UserRole = 'admin';
 export type DashboardTarget = 'public' | 'admin';
 export type ThemeMode = 'light' | 'dark';
 export type ClockType = 'analog' | 'digital' | 'both' | 'none';
@@ -42,9 +42,29 @@ export interface Application {
   sortOrder: number;
   accentColor?: string;
   openInNewTab?: boolean;
+  fileUrl?: string; // If set, button priority directly opens this file instead of web url
+  fileName?: string;
   tags?: string[];
   allowedRoles?: UserRole[];
-  dashboards?: DashboardTarget[]; // 'public' | 'it_staff' | 'admin'
+  dashboards?: DashboardTarget[]; // 'public' | 'admin'
+}
+
+export interface BackupItem {
+  id: string;
+  filename: string;
+  createdAt: string;
+  sizeBytes: number;
+  stats: {
+    applicationsCount: number;
+    categoriesCount: number;
+    usersCount: number;
+    uploadsCount: number;
+  };
+}
+
+export interface ActivityStats {
+  activeUsersCount: number;
+  todayVisits: number;
 }
 
 export interface SystemSettings {
@@ -72,6 +92,7 @@ export interface PublicConfig {
   applications: Application[];
   settings: SystemSettings;
   system?: SystemInfo;
+  activity?: ActivityStats;
   isSetupComplete: boolean;
   configVersion: string;
 }
@@ -94,6 +115,7 @@ export interface SystemStats {
   totalUsers: number;
   adminUsers: number;
   privateUsers: number;
+  activity?: ActivityStats;
 }
 
 export interface SystemInfo {

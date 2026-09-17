@@ -19,15 +19,15 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({ onComplete }) => {
     setError(null);
 
     if (username.trim().length < 3) {
-      setError('Username must be at least 3 characters.');
+      setError('نام کاربری باید حداقل ۳ کاراکتر باشد.');
       return;
     }
     if (password.length < 6) {
-      setError('Password must be at least 6 characters.');
+      setError('رمز عبور باید حداقل ۶ کاراکتر باشد.');
       return;
     }
     if (password !== confirmPassword) {
-      setError('Passwords do not match.');
+      setError('رمزهای عبور وارد شده یکسان نیستند.');
       return;
     }
 
@@ -37,24 +37,24 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({ onComplete }) => {
       setStoredToken(res.token);
       onComplete(res);
     } catch (err: any) {
-      setError(err.message || 'Setup failed. Please try again.');
+      setError(err.message || 'راه‌اندازی با خطا مواجه شد. لطفاً مجدداً تلاش نمایید.');
     } finally {
       setIsLoading(false);
     }
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-md">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-md" dir="rtl">
       <div className="relative w-full max-w-lg rounded-2xl bg-white dark:bg-[#0F172A] border border-slate-200/80 dark:border-white/10 shadow-2xl overflow-hidden p-6 md:p-8">
         <div className="text-center">
           <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20 mb-3 shadow-lg shadow-indigo-500/10">
             <Server className="w-7 h-7" />
           </div>
           <h2 className="text-2xl font-black text-slate-900 dark:text-slate-100 tracking-tight">
-            Welcome to Linux Dash
+            به هوم‌لب لینوکس خوش آمدید
           </h2>
           <p className="mt-1.5 text-xs sm:text-sm text-slate-500 dark:text-slate-400 max-w-sm mx-auto leading-relaxed">
-            Initial setup required. Create the primary administrator account to manage applications, categories, and settings.
+            راه‌اندازی اولیه الزامی است. لطفاً حساب مدیر ارشد را جهت پیکربندی سرویس‌ها، دسته‌بندی‌ها و تنظیمات امنیتی ایجاد نمایید.
           </p>
         </div>
 
@@ -67,54 +67,54 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({ onComplete }) => {
 
           <div>
             <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-              Admin Username
+              نام کاربری مدیر
             </label>
             <div className="relative">
-              <User className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+              <User className="absolute right-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
               <input
                 id="setup-admin-username"
                 type="text"
                 required
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
-                placeholder="e.g. admin or sysadmin"
-                className="w-full pl-10 pr-4 py-2.5 rounded-xl text-sm bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-white/10 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                placeholder="مثلاً admin"
+                className="w-full pr-10 pl-4 py-2.5 rounded-xl text-sm bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-white/10 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-indigo-500 focus:outline-none text-right"
               />
             </div>
           </div>
 
           <div>
             <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-              Admin Password
+              رمز عبور مدیر
             </label>
             <div className="relative">
-              <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+              <Lock className="absolute right-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
               <input
                 id="setup-admin-password"
                 type="password"
                 required
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder="Minimum 6 characters"
-                className="w-full pl-10 pr-4 py-2.5 rounded-xl text-sm bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-white/10 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                placeholder="حداقل ۶ کاراکتر"
+                className="w-full pr-10 pl-4 py-2.5 rounded-xl text-sm bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-white/10 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-indigo-500 focus:outline-none text-right"
               />
             </div>
           </div>
 
           <div>
             <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-              Confirm Admin Password
+              تکرار رمز عبور مدیر
             </label>
             <div className="relative">
-              <KeyRound className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+              <KeyRound className="absolute right-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
               <input
                 id="setup-admin-password-confirm"
                 type="password"
                 required
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
-                placeholder="Repeat password"
-                className="w-full pl-10 pr-4 py-2.5 rounded-xl text-sm bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-white/10 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                placeholder="تکرار مجدد رمز عبور"
+                className="w-full pr-10 pl-4 py-2.5 rounded-xl text-sm bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-white/10 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-indigo-500 focus:outline-none text-right"
               />
             </div>
           </div>
@@ -122,10 +122,10 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({ onComplete }) => {
           <div className="p-3 rounded-xl bg-indigo-50/60 dark:bg-indigo-950/30 border border-indigo-100 dark:border-indigo-900/40 text-xs text-indigo-900 dark:text-indigo-300 space-y-1">
             <div className="font-semibold flex items-center gap-1.5">
               <ShieldCheck className="w-4 h-4 text-indigo-500" />
-              <span>Security & Access Control Architecture</span>
+              <span>امنیت و رمزنگاری رمز عبور</span>
             </div>
             <p className="text-slate-600 dark:text-slate-400 text-[11px] leading-relaxed">
-              Passwords are salted and hashed with bcrypt. The public homepage will always remain open without login, displaying only public applications.
+              رمزهای عبور با الگوریتم قدرتمند bcrypt هش می‌شوند. داشبورد عمومی همواره بدون نیاز به لاگین برای نمایش سرویس‌های عمومی در دسترس خواهد بود.
             </p>
           </div>
 
@@ -136,11 +136,11 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({ onComplete }) => {
             className="w-full mt-2 py-3 px-4 rounded-xl font-bold text-sm bg-indigo-600 hover:bg-indigo-500 active:scale-[0.99] text-white shadow-lg shadow-indigo-600/30 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
           >
             {isLoading ? (
-              <span>Initializing Setup...</span>
+              <span>در حال راه‌اندازی و ثبت اطلاعات...</span>
             ) : (
               <>
-                <span>Complete Setup & Open Dashboard</span>
-                <ArrowRight className="w-4 h-4" />
+                <span>تکمیل راه‌اندازی و باز کردن داشبورد</span>
+                <ArrowRight className="w-4 h-4 rtl:rotate-180" />
               </>
             )}
           </button>

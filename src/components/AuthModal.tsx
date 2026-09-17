@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, Lock, User, KeyRound, Shield, LogIn } from 'lucide-react';
+import { X, Lock, User, KeyRound, LogIn, Sparkles } from 'lucide-react';
 import { api, setStoredToken } from '../lib/api';
 import { AuthResponse } from '../types';
 
@@ -10,15 +10,15 @@ interface AuthModalProps {
 }
 
 export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onSuccess }) => {
-  const [username, setUsername] = useState('');
-  const [password, setPassword] = useState('');
+  const [username, setUsername] = useState('admin');
+  const [password, setPassword] = useState('123');
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
   if (!isOpen) return null;
 
-  const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleLogin = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
     setError(null);
     setIsLoading(true);
 
@@ -28,61 +28,62 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onSuccess
       onSuccess(res);
       onClose();
     } catch (err: any) {
-      setError(err.message || 'Login failed. Please check your credentials.');
+      setError(err.message || 'نام کاربری یا رمز عبور اشتباه است.');
     } finally {
       setIsLoading(false);
     }
   };
 
+  const handleQuickFill = () => {
+    setUsername('admin');
+    setPassword('123');
+    setError(null);
+  };
+
   return (
     <div
       id="auth-modal-backdrop"
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-xl animate-in fade-in duration-200"
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-md animate-in fade-in duration-150"
       onClick={onClose}
+      dir="rtl"
     >
       <div
         id="auth-modal-card"
-        className="relative w-full max-w-md rounded-3xl bg-[#0d1322]/95 border border-white/[0.15] shadow-[0_20px_60px_-10px_rgba(0,0,0,0.7)] p-6 md:p-8 overflow-hidden text-slate-100 backdrop-blur-2xl"
+        className="relative w-full max-w-sm rounded-3xl bg-[#0e1320] border border-white/10 shadow-2xl p-6 text-slate-100 backdrop-blur-xl"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Modal Header */}
-        <div className="flex items-center justify-between pb-4 border-b border-white/[0.1]">
-          <div className="flex items-center gap-3">
-            <div className="p-2.5 rounded-2xl bg-blue-500/15 text-blue-400 border border-blue-500/30 shadow-inner">
-              <Lock className="w-5 h-5" />
+        <div className="flex items-center justify-between pb-3 border-b border-white/10">
+          <div className="flex items-center gap-2.5">
+            <div className="p-2 rounded-xl bg-blue-500/20 text-blue-400 border border-blue-500/30">
+              <Lock className="w-4 h-4" />
             </div>
-            <div>
-              <h3 className="text-lg font-extrabold text-white tracking-tight">
-                Authentication
-              </h3>
-              <p className="text-xs text-slate-400">
-                Sign in to access private services or administration
-              </p>
-            </div>
+            <h3 className="text-base font-black text-white">ورود به پنل مدیریت</h3>
           </div>
           <button
             id="auth-modal-close"
             onClick={onClose}
-            className="p-1.5 rounded-xl text-slate-400 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
+            className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
+            aria-label="بستن"
           >
-            <X className="w-5 h-5" />
+            <X className="w-4 h-4" />
           </button>
         </div>
 
         {/* Login Form */}
-        <form onSubmit={handleLogin} className="py-5 space-y-4">
+        <form onSubmit={handleLogin} className="py-4 space-y-3.5">
           {error && (
-            <div className="p-3 rounded-2xl bg-red-500/15 border border-red-500/30 text-red-300 text-xs">
+            <div className="p-2.5 rounded-xl bg-red-500/15 border border-red-500/30 text-red-300 text-xs text-center font-bold">
               {error}
             </div>
           )}
 
           <div>
-            <label className="block text-xs font-bold text-slate-300 mb-1.5 uppercase tracking-wider">
-              Username
+            <label className="block text-[11px] font-bold text-slate-300 mb-1">
+              نام کاربری
             </label>
             <div className="relative">
-              <User className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+              <User className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
               <input
                 id="auth-username"
                 type="text"
@@ -90,26 +91,26 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onSuccess
                 autoFocus
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
-                placeholder="Enter username"
-                className="w-full pl-10 pr-4 py-2.5 rounded-xl text-sm bg-white/[0.06] border border-white/[0.12] text-white placeholder:text-slate-500 focus:outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-500/30 transition-all"
+                placeholder="admin"
+                className="w-full pr-9 pl-3 py-2 rounded-xl text-sm bg-white/5 border border-white/10 text-white placeholder:text-slate-600 focus:outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-400 transition-all text-right font-medium"
               />
             </div>
           </div>
 
           <div>
-            <label className="block text-xs font-bold text-slate-300 mb-1.5 uppercase tracking-wider">
-              Password
+            <label className="block text-[11px] font-bold text-slate-300 mb-1">
+              رمز عبور
             </label>
             <div className="relative">
-              <KeyRound className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+              <KeyRound className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
               <input
                 id="auth-password"
                 type="password"
                 required
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder="Enter password"
-                className="w-full pl-10 pr-4 py-2.5 rounded-xl text-sm bg-white/[0.06] border border-white/[0.12] text-white placeholder:text-slate-500 focus:outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-500/30 transition-all"
+                placeholder="123"
+                className="w-full pr-9 pl-3 py-2 rounded-xl text-sm bg-white/5 border border-white/10 text-white placeholder:text-slate-600 focus:outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-400 transition-all text-right font-medium"
               />
             </div>
           </div>
@@ -119,31 +120,37 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onSuccess
               id="auth-submit-button"
               type="submit"
               disabled={isLoading}
-              className="w-full py-2.5 px-4 rounded-xl font-bold text-sm bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white shadow-lg shadow-blue-500/30 border border-white/15 transition-all duration-200 flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 hover:scale-[1.01] active:scale-[0.98]"
+              className="w-full py-2.5 px-4 rounded-xl font-bold text-sm bg-blue-600 hover:bg-blue-500 active:bg-blue-700 text-white shadow-md shadow-blue-500/25 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
             >
               {isLoading ? (
-                <span>Authenticating...</span>
+                <span>در حال ورود...</span>
               ) : (
                 <>
-                  <LogIn className="w-4 h-4" />
-                  <span>Sign In</span>
+                  <LogIn className="w-4 h-4 rtl:rotate-180" />
+                  <span>ورود</span>
                 </>
               )}
             </button>
           </div>
         </form>
 
-        {/* Footer info */}
-        <div className="pt-4 border-t border-white/[0.1] flex items-center justify-between text-[11px] text-slate-400">
-          <span className="flex items-center gap-1">
-            <Shield className="w-3.5 h-3.5 text-blue-400" />
-            Default Admin: <strong className="text-slate-200">admin / admin123</strong>
-          </span>
+        {/* Footer info: simple & concise */}
+        <div className="pt-3 border-t border-white/10 flex items-center justify-between text-xs text-slate-400">
           <button
-            onClick={onClose}
-            className="text-slate-400 hover:text-white transition-colors cursor-pointer"
+            type="button"
+            onClick={handleQuickFill}
+            className="flex items-center gap-1 text-slate-400 hover:text-blue-400 transition-colors cursor-pointer text-[11px]"
           >
-            Cancel
+            <Sparkles className="w-3 h-3 text-blue-400" />
+            <span>پیش‌فرض:</span>
+            <span className="text-slate-200 font-mono" dir="ltr">admin / 123</span>
+          </button>
+          <button
+            type="button"
+            onClick={onClose}
+            className="text-slate-400 hover:text-white transition-colors cursor-pointer text-[11px]"
+          >
+            انصراف
           </button>
         </div>
       </div>

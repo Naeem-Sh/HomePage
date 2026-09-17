@@ -1,4 +1,4 @@
-export type UserRole = 'admin' | 'private_user';
+export type UserRole = 'admin';
 export type DashboardTarget = 'public' | 'admin';
 
 export interface UploadedBackground {
@@ -41,9 +41,29 @@ export interface Application {
   sortOrder: number;
   accentColor?: string; // hex or tailwind color name
   openInNewTab?: boolean;
+  fileUrl?: string; // If set, button priority directly opens this file instead of web url
+  fileName?: string;
   tags?: string[];
   allowedRoles?: UserRole[];
-  dashboards?: DashboardTarget[]; // 'public', 'it_staff', 'admin'
+  dashboards?: DashboardTarget[]; // 'public' | 'admin'
+}
+
+export interface BackupItem {
+  id: string;
+  filename: string;
+  createdAt: string;
+  sizeBytes: number;
+  stats: {
+    applicationsCount: number;
+    categoriesCount: number;
+    usersCount: number;
+    uploadsCount: number;
+  };
+}
+
+export interface ActivityStats {
+  activeUsersCount: number;
+  todayVisits: number;
 }
 
 export interface SystemSettings {

@@ -2,11 +2,15 @@ import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
-import { DatabaseSchema, User, Category, Application, SystemSettings, AuditLog } from './types';
+import AdmZip from 'adm-zip';
+import * as XLSX from 'xlsx';
+import { DatabaseSchema, User, Category, Application, SystemSettings, AuditLog, BackupItem, ActivityStats } from './types';
 
 const DATA_DIR = process.env.DATA_DIR || path.join(process.cwd(), 'data');
-const UPLOADS_DIR = path.join(DATA_DIR, 'uploads');
-const DB_FILE = path.join(DATA_DIR, 'database.json');
+const UPLOADS_DIR = process.env.UPLOADS_DIR || path.join(DATA_DIR, 'uploads');
+const BACKUPS_DIR = process.env.BACKUPS_DIR || path.join(DATA_DIR, 'backups');
+const DB_FILE = process.env.DB_FILE || path.join(DATA_DIR, 'database.json');
+const VISITS_FILE = process.env.VISITS_FILE || path.join(DATA_DIR, 'visits.json');
 
 // Ensure directories exist
 if (!fs.existsSync(DATA_DIR)) {
@@ -14,6 +18,9 @@ if (!fs.existsSync(DATA_DIR)) {
 }
 if (!fs.existsSync(UPLOADS_DIR)) {
   fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+}
+if (!fs.existsSync(BACKUPS_DIR)) {
+  fs.mkdirSync(BACKUPS_DIR, { recursive: true });
 }
 
 function generateId(): string {
@@ -27,45 +34,45 @@ function generateVersionHash(): string {
 const DEFAULT_CATEGORIES: Category[] = [
   {
     id: 'cat-infra',
-    name: 'Infrastructure & Cloud',
+    name: 'زیرساخت و سرورها',
     icon: 'Server',
     sortOrder: 1,
-    description: 'Core virtualization, servers, and container platforms'
+    description: 'مجازی‌سازی، هاست‌ها و پلتفرم‌های کانتینری داکر'
   },
   {
     id: 'cat-monitoring',
-    name: 'Monitoring & Metrics',
+    name: 'مانیتورینگ و وضعیت',
     icon: 'Activity',
     sortOrder: 2,
-    description: 'System telemetry, network metrics, and alert dashboards'
+    description: 'تله‌متری سیستم، تحلیل مصرف منابع و هشدارهای سرور'
   },
   {
     id: 'cat-storage',
-    name: 'Storage & Documents',
+    name: 'ذخیره‌سازی و اسناد',
     icon: 'HardDrive',
     sortOrder: 3,
-    description: 'Cloud storage, network shares, backup and documents'
+    description: 'فضای ابری، پوشه‌های اشتراکی شبکه و فایل‌ها'
   },
   {
     id: 'cat-media',
-    name: 'Media & Automation',
+    name: 'رسانه و مدیا',
     icon: 'Film',
     sortOrder: 4,
-    description: 'Streaming, audio, personal photos, and download automation'
+    description: 'سرویس‌های استریم مدیا، موزیک و پشتیبان‌گیری عکس'
   },
   {
     id: 'cat-security',
-    name: 'Networking & Security',
+    name: 'شبکه و امنیت',
     icon: 'Shield',
     sortOrder: 5,
-    description: 'DNS ad-blocking, VPN gateways, and credential managers'
+    description: 'مدیریت DNS، گذرگاه‌های VPN و امنیت شبکه'
   },
   {
     id: 'cat-dev',
-    name: 'Development & Tools',
+    name: 'ابزارهای توسعه و کد',
     icon: 'Terminal',
     sortOrder: 6,
-    description: 'Code repositories, IDEs, and workflow automation'
+    description: 'مخازن سورس کد، ادیتورهای ابری و ابزارهای خط فرمان'
   }
 ];
 
@@ -293,7 +300,7 @@ const DEFAULT_APPLICATIONS: Application[] = [
     accentColor: '#175DDC',
     openInNewTab: true,
     tags: ['passwords', 'security', 'private'],
-    allowedRoles: ['admin', 'private_user']
+    allowedRoles: ['admin']
   },
   {
     id: 'app-wireguard',
@@ -351,7 +358,7 @@ const DEFAULT_SETTINGS: SystemSettings = {
   showSeconds: true,
   gridColumns: 4,
   publicSearch: true,
-  customFooterText: 'Powered by Linux & Open Source',
+  customFooterText: 'Developed by : N.Shaaeri',
   showTelemetryBar: true,
   telemetryPosition: 'top',
   configVersion: generateVersionHash()
@@ -359,10 +366,74 @@ const DEFAULT_SETTINGS: SystemSettings = {
 
 class DatabaseService {
   private schema: DatabaseSchema;
+  private sessions = new Map<string, { lastSeen: number }>();
+  private dailyVisits: Record<string, number> = {};
 
   constructor() {
     this.schema = this.loadDatabase();
+    this.loadVisits();
     this.ensureDefaultUsers();
+  }
+
+  private loadVisits() {
+    try {
+      if (fs.existsSync(VISITS_FILE)) {
+        const raw = fs.readFileSync(VISITS_FILE, 'utf-8');
+        this.dailyVisits = JSON.parse(raw);
+      }
+    } catch {
+      this.dailyVisits = {};
+    }
+  }
+
+  private saveVisits() {
+    try {
+      fs.writeFileSync(VISITS_FILE, JSON.stringify(this.dailyVisits, null, 2), 'utf-8');
+    } catch (e) {
+      console.warn('Failed to save visits:', e);
+    }
+  }
+
+  public trackVisit(clientId = 'default'): ActivityStats {
+    const today = new Date().toISOString().slice(0, 10);
+    const now = Date.now();
+
+    const prev = this.sessions.get(clientId);
+    // If not seen within last 15 minutes, increment today's visits
+    if (!prev || now - prev.lastSeen > 15 * 60 * 1000) {
+      this.dailyVisits[today] = (this.dailyVisits[today] || 0) + 1;
+      this.saveVisits();
+    }
+    this.sessions.set(clientId, { lastSeen: now });
+
+    // Clean stale sessions older than 30 mins
+    for (const [key, val] of this.sessions.entries()) {
+      if (now - val.lastSeen > 30 * 60 * 1000) {
+        this.sessions.delete(key);
+      }
+    }
+
+    const activeCount = Array.from(this.sessions.values()).filter(
+      (s) => now - s.lastSeen <= 15 * 60 * 1000
+    ).length;
+
+    return {
+      activeUsersCount: Math.max(1, activeCount),
+      todayVisits: this.dailyVisits[today] || 1
+    };
+  }
+
+  public getActivityStats(): ActivityStats {
+    const today = new Date().toISOString().slice(0, 10);
+    const now = Date.now();
+    const activeCount = Array.from(this.sessions.values()).filter(
+      (s) => now - s.lastSeen <= 15 * 60 * 1000
+    ).length;
+
+    return {
+      activeUsersCount: Math.max(1, activeCount),
+      todayVisits: this.dailyVisits[today] || 1
+    };
   }
 
   private loadDatabase(): DatabaseSchema {
@@ -407,7 +478,7 @@ class DatabaseService {
   private ensureDefaultUsers() {
     const salt = bcrypt.genSaltSync(10);
     const envUser = (process.env.INITIAL_ADMIN_USER && process.env.INITIAL_ADMIN_USER.trim()) || 'admin';
-    const envPass = process.env.INITIAL_ADMIN_PASSWORD || 'admin123';
+    const envPass = process.env.INITIAL_ADMIN_PASSWORD || '123';
 
     // 1. Remove duplicate users with same username (case-insensitive)
     const uniqueUsers: User[] = [];
@@ -613,7 +684,7 @@ class DatabaseService {
     if (user.role === 'admin') {
       return this.getApplications();
     }
-    // Private user
+    // Non-admin user (fallback)
     return this.schema.applications.filter(a => {
       if (!a.isEnabled) return false;
       if (a.dashboards && Array.isArray(a.dashboards)) {
@@ -621,7 +692,6 @@ class DatabaseService {
       } else if (a.isPublic) {
         return true;
       }
-      if (a.allowedRoles && a.allowedRoles.includes('private_user')) return true;
       if (user.allowedCategoryIds && user.allowedCategoryIds.includes(a.categoryId)) return true;
       return false;
     }).sort((a, b) => a.sortOrder - b.sortOrder);
@@ -697,8 +767,8 @@ class DatabaseService {
       ip
     };
     this.schema.auditLogs.unshift(log);
-    // Keep max 500 logs
-    if (this.schema.auditLogs.length > 500) {
+    // Keep max 200 logs (trim older logs from the end)
+    while (this.schema.auditLogs.length > 200) {
       this.schema.auditLogs.pop();
     }
     this.saveDatabase();
@@ -713,7 +783,353 @@ class DatabaseService {
     this.saveDatabase();
   }
 
-  // --- Import / Export ---
+  // --- ZIP Backup & Restore System (Max 20 Backups) ---
+  public listZipBackups(): BackupItem[] {
+    if (!fs.existsSync(BACKUPS_DIR)) return [];
+    const files = fs.readdirSync(BACKUPS_DIR).filter((f) => f.endsWith('.zip'));
+
+    const items: BackupItem[] = [];
+    for (const file of files) {
+      const filePath = path.join(BACKUPS_DIR, file);
+      try {
+        const stat = fs.statSync(filePath);
+        const id = file.replace(/\.zip$/, '');
+
+        let stats = {
+          applicationsCount: 0,
+          categoriesCount: 0,
+          usersCount: 0,
+          uploadsCount: 0
+        };
+        let createdAt = stat.mtime.toISOString();
+
+        try {
+          const zip = new AdmZip(filePath);
+          const manifestEntry = zip.getEntry('manifest.json');
+          if (manifestEntry) {
+            const m = JSON.parse(manifestEntry.getData().toString('utf-8'));
+            if (m.stats) stats = m.stats;
+            if (m.createdAt) createdAt = m.createdAt;
+          } else {
+            const dbEntry = zip.getEntry('database.json');
+            if (dbEntry) {
+              const dbParsed = JSON.parse(dbEntry.getData().toString('utf-8'));
+              stats.applicationsCount = dbParsed.applications?.length || 0;
+              stats.categoriesCount = dbParsed.categories?.length || 0;
+              stats.usersCount = dbParsed.users?.length || 0;
+            }
+          }
+        } catch (e) {
+          console.warn('Failed to parse zip manifest for:', file, e);
+        }
+
+        items.push({
+          id,
+          filename: file,
+          createdAt,
+          sizeBytes: stat.size,
+          stats
+        });
+      } catch (e) {
+        console.warn('Error reading backup file stat:', file, e);
+      }
+    }
+
+    items.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    return items.slice(0, 20);
+  }
+
+  public pruneBackupsToLimit(limit = 20) {
+    if (!fs.existsSync(BACKUPS_DIR)) return;
+    const files = fs.readdirSync(BACKUPS_DIR).filter((f) => f.endsWith('.zip'));
+    if (files.length <= limit) return;
+
+    const fileDetails = files.map((file) => {
+      const filePath = path.join(BACKUPS_DIR, file);
+      const stat = fs.statSync(filePath);
+      return { file, filePath, mtime: stat.mtime.getTime() };
+    });
+
+    fileDetails.sort((a, b) => b.mtime - a.mtime);
+    const toDelete = fileDetails.slice(limit);
+    for (const item of toDelete) {
+      try {
+        fs.unlinkSync(item.filePath);
+      } catch (e) {
+        console.warn('Failed to remove excess backup:', item.filePath, e);
+      }
+    }
+  }
+
+  public createZipBackup(): BackupItem {
+    const timestamp = new Date();
+    const dateStr = timestamp.toISOString().replace(/[:.]/g, '-');
+    const id = `backup-${dateStr}`;
+    const filename = `${id}.zip`;
+    const filePath = path.join(BACKUPS_DIR, filename);
+
+    const zip = new AdmZip();
+
+    // 1. database.json
+    const dbContent = JSON.stringify(this.schema, null, 2);
+    zip.addFile('database.json', Buffer.from(dbContent, 'utf-8'));
+
+    // 2. Individual data models for transparency and modular extraction
+    zip.addFile('applications.json', Buffer.from(JSON.stringify(this.schema.applications, null, 2), 'utf-8'));
+    zip.addFile('categories.json', Buffer.from(JSON.stringify(this.schema.categories, null, 2), 'utf-8'));
+    zip.addFile('users.json', Buffer.from(JSON.stringify(this.schema.users, null, 2), 'utf-8'));
+    zip.addFile('settings.json', Buffer.from(JSON.stringify(this.schema.settings, null, 2), 'utf-8'));
+    zip.addFile('audit-logs.json', Buffer.from(JSON.stringify(this.schema.auditLogs, null, 2), 'utf-8'));
+
+    // 3. Complete formatted Excel Workbook (.xlsx) inside ZIP package for maximum portability
+    try {
+      const wb = XLSX.utils.book_new();
+
+      const appsRows = this.schema.applications.map((app, idx) => {
+        const cat = this.schema.categories.find(c => c.id === app.categoryId);
+        return {
+          'ردیف': idx + 1,
+          'شناسه برنامه': app.id,
+          'نام برنامه': app.name,
+          'دسته‌بندی': cat ? cat.name : (app.categoryId || 'عمومی'),
+          'شناسه دسته‌بندی': app.categoryId || '',
+          'آدرس اینترنتی (URL)': app.url,
+          'توضیحات': app.description || '',
+          'آیکون': app.icon || 'globe',
+          'دسترسی عمومی': app.isPublic ? 'بله' : 'خیر',
+          'وضعیت فعال': app.isEnabled !== false ? 'بله' : 'خیر',
+          'باز شدن در تب جدید': app.openInNewTab !== false ? 'بله' : 'خیر',
+          'ترتیب نمایش': app.sortOrder ?? idx + 1,
+          'رنگ برجسته': app.accentColor || '',
+          'آدرس فایل پیوست (fileUrl)': app.fileUrl || '',
+          'نام فایل پیوست (fileName)': app.fileName || '',
+          'برچسب‌ها': Array.isArray(app.tags) ? app.tags.join(', ') : '',
+          'داشبوردها': Array.isArray(app.dashboards) ? app.dashboards.join(', ') : 'public, admin'
+        };
+      });
+      const wsApps = XLSX.utils.json_to_sheet(appsRows);
+      XLSX.utils.book_append_sheet(wb, wsApps, 'برنامه‌ها (Applications)');
+
+      const catRows = this.schema.categories.map((cat, idx) => ({
+        'ردیف': idx + 1,
+        'شناسه دسته‌بندی': cat.id,
+        'نام دسته‌بندی': cat.name,
+        'آیکون': cat.icon,
+        'ترتیب نمایش': cat.sortOrder ?? idx + 1,
+        'توضیحات': cat.description || ''
+      }));
+      const wsCats = XLSX.utils.json_to_sheet(catRows);
+      XLSX.utils.book_append_sheet(wb, wsCats, 'دسته‌بندی‌ها (Categories)');
+
+      const s = this.schema.settings;
+      const settingsRows = [
+        { 'پارامتر': 'عنوان سرور و هوم‌لب', 'کلید': 'title', 'مقدار': s.title || '' },
+        { 'پارامتر': 'زیرعنوان', 'کلید': 'subtitle', 'مقدار': s.subtitle || '' },
+        { 'پارامتر': 'حالت پیش‌فرض تم (light/dark)', 'کلید': 'defaultTheme', 'مقدار': s.defaultTheme || 'dark' },
+        { 'پارامتر': 'نوع ساعت (analog/digital/both/none)', 'کلید': 'clockType', 'مقدار': s.clockType || 'both' },
+        { 'پارامتر': 'نمایش تاریخ', 'کلید': 'showDate', 'مقدار': s.showDate ? 'true' : 'false' },
+        { 'پارامتر': 'نمایش ثانیه‌شمار', 'کلید': 'showSeconds', 'مقدار': s.showSeconds ? 'true' : 'false' },
+        { 'پارامتر': 'تعداد ستون‌ها در دسکتاپ (2 تا 8)', 'کلید': 'gridColumns', 'مقدار': String(s.gridColumns || 4) },
+        { 'پارامتر': 'جستجوی عمومی', 'کلید': 'publicSearch', 'مقدار': s.publicSearch !== false ? 'true' : 'false' },
+        { 'پارامتر': 'متن پاورقی سفارشی', 'کلید': 'customFooterText', 'مقدار': s.customFooterText || '' },
+        { 'پارامتر': 'آدرس لوگو', 'کلید': 'logoUrl', 'مقدار': s.logoUrl || '' },
+        { 'پارامتر': 'آدرس تصویر پس‌زمینه', 'کلید': 'backgroundUrl', 'مقدار': s.backgroundUrl || '' },
+        { 'پارامتر': 'مات بودن پس‌زمینه', 'کلید': 'backgroundBlur', 'مقدار': s.backgroundBlur ? 'true' : 'false' },
+        { 'پارامتر': 'شفافیت لایه تیره پس‌زمینه (0 تا 90)', 'کلید': 'backgroundOverlayOpacity', 'مقدار': String(s.backgroundOverlayOpacity ?? 40) },
+        { 'پارامتر': 'نمایش نوار تله‌متری', 'کلید': 'showTelemetryBar', 'مقدار': s.showTelemetryBar !== false ? 'true' : 'false' },
+        { 'پارامتر': 'موقعیت نوار تله‌متری (top/bottom)', 'کلید': 'telemetryPosition', 'مقدار': s.telemetryPosition || 'top' }
+      ];
+      const wsSettings = XLSX.utils.json_to_sheet(settingsRows);
+      XLSX.utils.book_append_sheet(wb, wsSettings, 'تنظیمات (Settings)');
+
+      const xlsxBuffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+      zip.addFile('homelab-data.xlsx', xlsxBuffer);
+    } catch (e) {
+      console.warn('Could not add Excel file to backup zip:', e);
+    }
+
+    // 4. Uploads directory (all icons, logos, backgrounds, and attached documents)
+    let uploadsCount = 0;
+    if (fs.existsSync(UPLOADS_DIR)) {
+      const addDirRecursive = (dirPath: string, zipRelativePath: string) => {
+        const items = fs.readdirSync(dirPath);
+        for (const item of items) {
+          const fullPath = path.join(dirPath, item);
+          const stat = fs.statSync(fullPath);
+          if (stat.isDirectory()) {
+            addDirRecursive(fullPath, `${zipRelativePath}/${item}`);
+          } else if (stat.isFile()) {
+            zip.addLocalFile(fullPath, zipRelativePath);
+            uploadsCount++;
+          }
+        }
+      };
+      addDirRecursive(UPLOADS_DIR, 'uploads');
+    }
+
+    const stats = {
+      applicationsCount: this.schema.applications.length,
+      categoriesCount: this.schema.categories.length,
+      usersCount: this.schema.users.length,
+      uploadsCount
+    };
+
+    const manifest = {
+      id,
+      version: '2.1.0',
+      createdAt: timestamp.toISOString(),
+      stats
+    };
+    zip.addFile('manifest.json', Buffer.from(JSON.stringify(manifest, null, 2), 'utf-8'));
+
+    zip.writeZip(filePath);
+    this.pruneBackupsToLimit(20);
+
+    const stat = fs.statSync(filePath);
+    return {
+      id,
+      filename,
+      createdAt: timestamp.toISOString(),
+      sizeBytes: stat.size,
+      stats
+    };
+  }
+
+  public getBackupZipPath(id: string): string | null {
+    const filename = id.endsWith('.zip') ? id : `${id}.zip`;
+    const filePath = path.join(BACKUPS_DIR, filename);
+    if (fs.existsSync(filePath)) {
+      return filePath;
+    }
+    return null;
+  }
+
+  public restoreZipBackup(id: string): { success: boolean; stats: any } {
+    const filePath = this.getBackupZipPath(id);
+    if (!filePath) {
+      throw new Error('Backup file not found');
+    }
+    const buffer = fs.readFileSync(filePath);
+    return this.restoreFromZipBuffer(buffer);
+  }
+
+  public restoreFromZipBuffer(buffer: Buffer): { success: boolean; stats: any } {
+    const zip = new AdmZip(buffer);
+    const zipEntries = zip.getEntries();
+
+    let dbEntry = zipEntries.find((e) => e.entryName === 'database.json' || e.entryName.endsWith('/database.json'));
+    if (dbEntry) {
+      const raw = dbEntry.getData().toString('utf-8');
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed === 'object') {
+        if (Array.isArray(parsed.applications)) this.schema.applications = parsed.applications;
+        if (Array.isArray(parsed.categories)) this.schema.categories = parsed.categories;
+        if (Array.isArray(parsed.users) && parsed.users.length > 0) {
+          // Preserve current admin password hash if restoring older users list
+          const currentAdmin = this.schema.users.find(u => u.role === 'admin');
+          if (currentAdmin && !parsed.users.some((u: any) => u.id === currentAdmin.id)) {
+            this.schema.users = [currentAdmin, ...parsed.users];
+          } else {
+            this.schema.users = parsed.users;
+          }
+        }
+        if (parsed.settings) this.schema.settings = { ...this.schema.settings, ...parsed.settings };
+        if (Array.isArray(parsed.auditLogs)) this.schema.auditLogs = parsed.auditLogs;
+      }
+    } else {
+      const appEntry = zipEntries.find((e) => e.entryName === 'applications.json' || e.entryName.endsWith('/applications.json'));
+      if (appEntry) this.schema.applications = JSON.parse(appEntry.getData().toString('utf-8'));
+
+      const catEntry = zipEntries.find((e) => e.entryName === 'categories.json' || e.entryName.endsWith('/categories.json'));
+      if (catEntry) this.schema.categories = JSON.parse(catEntry.getData().toString('utf-8'));
+
+      const userEntry = zipEntries.find((e) => e.entryName === 'users.json' || e.entryName.endsWith('/users.json'));
+      if (userEntry) this.schema.users = JSON.parse(userEntry.getData().toString('utf-8'));
+
+      const setEntry = zipEntries.find((e) => e.entryName === 'settings.json' || e.entryName.endsWith('/settings.json'));
+      if (setEntry) this.schema.settings = { ...this.schema.settings, ...JSON.parse(setEntry.getData().toString('utf-8')) };
+    }
+
+    // Restore uploads (all icons, logos, backgrounds, documents)
+    let uploadsCount = 0;
+    for (const entry of zipEntries) {
+      if (entry.isDirectory) continue;
+      const normalizedName = entry.entryName.replace(/\\/g, '/');
+      let relPath = '';
+
+      if (normalizedName.startsWith('uploads/')) {
+        relPath = normalizedName.replace(/^uploads\//, '');
+      } else if (normalizedName.includes('/uploads/')) {
+        relPath = normalizedName.split('/uploads/')[1];
+      } else if (normalizedName.startsWith('icons/')) {
+        relPath = `icons/${normalizedName.replace(/^icons\//, '')}`;
+      }
+
+      if (relPath) {
+        const destPath = path.join(UPLOADS_DIR, relPath);
+        fs.mkdirSync(path.dirname(destPath), { recursive: true });
+        fs.writeFileSync(destPath, entry.getData());
+        uploadsCount++;
+      }
+    }
+
+    this.bumpVersion();
+    this.saveDatabase();
+
+    const stats = {
+      applicationsCount: this.schema.applications.length,
+      categoriesCount: this.schema.categories.length,
+      usersCount: this.schema.users.length,
+      uploadsCount
+    };
+
+    return { success: true, stats };
+  }
+
+  public resetDatabase(wipeUploads = false): { success: boolean; message: string } {
+    this.schema.applications = [];
+    this.schema.categories = [];
+    this.schema.settings = {
+      ...DEFAULT_SETTINGS,
+      configVersion: generateVersionHash()
+    };
+
+    if (wipeUploads && fs.existsSync(UPLOADS_DIR)) {
+      try {
+        const removeDirContents = (dir: string) => {
+          const files = fs.readdirSync(dir);
+          for (const file of files) {
+            const curPath = path.join(dir, file);
+            if (fs.statSync(curPath).isDirectory()) {
+              removeDirContents(curPath);
+              try { fs.rmdirSync(curPath); } catch {}
+            } else {
+              try { fs.unlinkSync(curPath); } catch {}
+            }
+          }
+        };
+        removeDirContents(UPLOADS_DIR);
+        const iconsDir = path.join(UPLOADS_DIR, 'icons');
+        if (!fs.existsSync(iconsDir)) fs.mkdirSync(iconsDir, { recursive: true });
+      } catch (e) {
+        console.warn('Error wiping uploads directory:', e);
+      }
+    }
+
+    this.bumpVersion();
+    this.saveDatabase();
+    return { success: true, message: 'داده‌ها با موفقیت پاک شدند و سیستم بازنشانی شد' };
+  }
+
+  public deleteZipBackup(id: string): boolean {
+    const filePath = this.getBackupZipPath(id);
+    if (filePath && fs.existsSync(filePath)) {
+      fs.unlinkSync(filePath);
+      return true;
+    }
+    return false;
+  }
+
   public exportBackup() {
     return {
       version: '1.0.0',
@@ -727,10 +1143,10 @@ class DatabaseService {
   public importBackup(payload: { categories?: Category[]; applications?: Application[]; settings?: Partial<SystemSettings> }): boolean {
     if (!payload || typeof payload !== 'object') return false;
 
-    if (Array.isArray(payload.categories) && payload.categories.length > 0) {
+    if (Array.isArray(payload.categories)) {
       this.schema.categories = payload.categories;
     }
-    if (Array.isArray(payload.applications) && payload.applications.length > 0) {
+    if (Array.isArray(payload.applications)) {
       this.schema.applications = payload.applications;
     }
     if (payload.settings && typeof payload.settings === 'object') {

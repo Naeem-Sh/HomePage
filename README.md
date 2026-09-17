@@ -1,24 +1,63 @@
-# Linux Homepage & Service Launcher (LinxDash)
+# Homelab Dashboard & Service Launcher (LinxDash)
 
-A modern, fast, and minimal self-hosted Linux homepage and service launcher. Built for home labs, homelabbers, Linux server administrators, and local networks.
+[![Docker Build](https://img.shields.io/badge/docker-ready-blue.svg?logo=docker&logoColor=white)](https://www.docker.com/)
+[![Node Version](https://img.shields.io/badge/node-%3E%3D22.0.0-brightgreen.svg?logo=node.js&logoColor=white)](https://nodejs.org/)
+[![React 19](https://img.shields.io/badge/react-19.0-61dafb.svg?logo=react&logoColor=black)](https://react.dev/)
+[![TypeScript](https://img.shields.io/badge/typescript-5.8-3178c6.svg?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+[![Tailwind CSS v4](https://img.shields.io/badge/tailwind-v4.1-38bdf8.svg?logo=tailwindcss&logoColor=white)](https://tailwindcss.com/)
+[![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+
+A modern, high-performance, and privacy-focused self-hosted homepage and application launcher designed for homelabs, home servers, and Linux enthusiasts. 
+
+LinxDash combines a refined glassmorphic interface with lightweight zero-database persistence, robust role-based access control (RBAC), and 60+ native homelab icons.
 
 ---
 
-## Key Features
+## Highlights & Features
 
-- **Public Homepage Out-of-the-Box**: Root URL immediately renders the public homepage with zero authentication barrier. Shows only applications flagged as public.
-- **Glassmorphic Modern UI**: Responsive layout with subtle frosted glass effects, accent glow on hover, high-contrast dark/light mode toggle, and smooth motion.
-- **Live Analog & Digital Clock**: Configurable clock displaying real-time hours, minutes, seconds hands, and localized date.
-- **50+ Built-In Linux & Homelab Icons**: Native high-definition vector icons for Docker, Proxmox, Jellyfin, Plex, Nextcloud, Home Assistant, WireGuard, Pi-hole, Grafana, Portainer, TrueNAS, and more.
-- **Custom Icon & Logo Upload**: Support for uploading transparent PNG, SVG (with automatic security sanitization stripping `<script>` and `on*` vectors), WebP, and JPG logos.
-- **UNC & Local Storage Helper**: Specialized handling for local `\\server\share`, `smb://`, and `file://` resources with a dedicated destination helper modal explaining browser security policies and providing 1-click path copying and terminal commands.
-- **Role-Based Access Control (RBAC)**:
-  - **Public**: Unauthenticated visitors only view public services.
-  - **Private User**: Authenticated users view both public and authorized private services.
-  - **Administrator**: Complete control over categories, applications, users, appearance, and system backups.
-- **Disaster Recovery & Portability**: 1-click JSON backup export and restore directly from the browser — no manual config file editing required.
-- **Production Container Ready**: Zero-fuss `Dockerfile` and `docker-compose.yml` with persistent storage volumes.
-- **Built-In Automated Test Suite**: Built-in verification tests covering authentication separation, password hashing, and SVG XSS filtering.
+- 🌐 **Instant Public Homepage**: Guest visitors landing on the root URL see public services immediately without an authentication wall.
+- 🔒 **Role-Based Access Control (RBAC)**:
+  - **Public Visitors**: Unauthenticated guests access only applications marked as public.
+  - **Private Users**: Authenticated users access their personal and authorized private services.
+  - **Administrators**: Full control over service registrations, category hierarchies, user management, and portal branding.
+- 💾 **Persistent & Zero-Maintenance Storage**:
+  - Uses an atomic file-based JSON persistence engine.
+  - No external database (PostgreSQL, MongoDB, etc.) required.
+  - All configurations, uploaded icons, wallpapers, and backups reside in a single persistent volume (`/app/data`), completely decoupled from container life cycles.
+- 🎨 **Modern Glassmorphic UI**:
+  - Balanced typography with fluid responsive layouts (Grid & List views).
+  - High-contrast dark and light modes with custom accent palettes.
+  - Live analog and digital clock with customizable display modes.
+- 📦 **60+ Built-In Homelab Icons**:
+  - Native vector icons for Proxmox, Portainer, Docker, Jellyfin, Plex, Nextcloud, Home Assistant, TrueNAS, Pi-hole, WireGuard, pfSense, AdGuard, Grafana, and more.
+  - Integrated custom upload for SVGs (with automated security sanitization stripping scripts and XSS vectors), PNGs, and WebP images.
+- 🗂️ **Local Share & UNC Path Helper**:
+  - Dedicated smart handler for `\\server\share`, `smb://`, and `file://` targets with 1-click clipboard copying and terminal mount helpers.
+- 🔄 **Disaster Recovery & Multi-Format Backups**:
+  - 1-click full ZIP snapshots containing `database.json`, individual model JSONs, an Excel sheet (`homelab-data.xlsx`), and uploaded files.
+  - Instant one-click restore with schema validation.
+- 🐳 **Production Docker Standards**:
+  - Multi-stage minimal Alpine build (`node:22-alpine`).
+  - Runs as an unprivileged non-root user (`USER node`).
+  - Built-in container health check.
+  - Graceful shutdown signal handling (`SIGTERM` / `SIGINT`).
+
+---
+
+## Storage & Data Persistence (Why Data Survives Image Deletions)
+
+In Docker, data written directly inside a container is lost when the container is deleted. To guarantee that **your data is never erased when removing, updating, or pulling new container images**, LinxDash consolidates all mutable state into a single volume mount point: `/app/data`.
+
+```
+/app/data/                    <--- Mount this directory to a Docker Volume or Host Folder
+├── database.json             <--- Core state: applications, categories, users, settings, audit logs
+├── visits.json               <--- Analytics and visit counters
+├── uploads/                  <--- Custom icons, portal logos, custom backgrounds, and PDF guides
+│   └── icons/
+└── backups/                  <--- Auto and manual .ZIP snapshots
+```
+
+As long as `/app/data` is mounted to a **Docker Named Volume** or a **Host Directory Bind Mount**, you can run `docker rm`, `docker rmi`, or pull new image tags without losing a single byte.
 
 ---
 
@@ -26,36 +65,126 @@ A modern, fast, and minimal self-hosted Linux homepage and service launcher. Bui
 
 ### Option 1: Docker Compose (Recommended)
 
-1. Clone or copy your project files.
-2. Launch the container:
-   ```bash
-   docker compose up -d
-   ```
-3. Open `http://localhost:3000` in your web browser.
-4. On first load, complete the setup wizard to create your primary administrator account.
+1. Create a `docker-compose.yml` file:
 
-### Option 2: Docker Run
+```yaml
+version: '3.8'
+
+services:
+  homelab-dashboard:
+    image: homelab-dashboard:latest
+    # Or build locally:
+    # build: .
+    container_name: homelab-dashboard
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - DATA_DIR=/app/data
+      - JWT_SECRET=replace_with_a_secure_random_string_in_production
+    volumes:
+      # Named volume: persists your database, uploads, and backups safely
+      - homelab_data:/app/data
+
+      # Alternative: Host directory bind mount
+      # - ./data:/app/data
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/api/public/config"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+volumes:
+  homelab_data:
+    driver: local
+```
+
+2. Start the container in detached mode:
 
 ```bash
+docker compose up -d
+```
+
+3. Open your browser at `http://localhost:3000`. On first launch, follow the on-screen prompt or use the admin login to start adding categories and services.
+
+---
+
+### Option 2: Docker CLI (`docker run`)
+
+Run LinxDash with a named volume:
+
+```bash
+# 1. Create a persistent Docker volume
+docker volume create homelab_data
+
+# 2. Run the container attached to the volume
 docker run -d \
-  --name linxdash \
-  -p 3000:3000 \
-  -v $(pwd)/data:/app/data \
-  -v $(pwd)/uploads:/app/uploads \
+  --name homelab-dashboard \
   --restart unless-stopped \
-  linxdash:latest
+  -p 3000:3000 \
+  -e NODE_ENV=production \
+  -e JWT_SECRET="your-super-secret-jwt-token" \
+  -v homelab_data:/app/data \
+  homelab-dashboard:latest
+```
+
+*To use a local folder on your host machine instead of a named volume:*
+```bash
+docker run -d \
+  --name homelab-dashboard \
+  --restart unless-stopped \
+  -p 3000:3000 \
+  -e NODE_ENV=production \
+  -v $(pwd)/data:/app/data \
+  homelab-dashboard:latest
 ```
 
 ---
 
-## Reverse Proxy Configurations
+## How to Upgrade Without Data Loss
+
+When a new version or image is released, upgrade seamlessly with zero data loss:
+
+```bash
+# Pull the latest image
+docker compose pull
+
+# Recreate the container with existing persistent volume
+docker compose up -d
+```
+
+Because your data is stored in the volume `homelab_data`, the old container and old image are discarded, and the new container starts with your existing applications, users, and uploaded files.
+
+---
+
+## Configuration & Environment Variables
+
+| Variable | Default | Description |
+| :--- | :--- | :--- |
+| `PORT` | `3000` | HTTP port the server binds to |
+| `NODE_ENV` | `production` | Node.js execution environment (`development` / `production`) |
+| `DATA_DIR` | `/app/data` | Path to persistent storage directory for data, uploads, and backups |
+| `JWT_SECRET` | *(auto-generated)* | Cryptographic key used to sign and verify user session tokens |
+| `INITIAL_ADMIN_USER` | `admin` | Initial admin username created if database is empty on first boot |
+| `INITIAL_ADMIN_PASSWORD` | `admin` | Initial admin password created if database is empty on first boot |
+| `UPLOADS_DIR` | `$DATA_DIR/uploads` | Optional custom path for uploaded images and attachments |
+| `BACKUPS_DIR` | `$DATA_DIR/backups` | Optional custom path for backup archive files |
+
+---
+
+## Reverse Proxy Examples
 
 ### Nginx
 
 ```nginx
 server {
     listen 80;
-    server_name dashboard.lan;
+    server_name dashboard.homelab.local;
+
+    client_max_body_size 25M;
 
     location / {
         proxy_pass http://127.0.0.1:3000;
@@ -70,17 +199,18 @@ server {
 }
 ```
 
-### Traefik (Docker Labels)
+### Traefik
 
 ```yaml
 services:
-  linxdash:
-    image: linxdash:latest
+  homelab-dashboard:
+    image: homelab-dashboard:latest
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.linxdash.rule=Host(`dashboard.homelab.local`)"
-      - "traefik.http.routers.linxdash.entrypoints=websecure"
-      - "traefik.http.routers.linxdash.tls.certresolver=myresolver"
+      - "traefik.http.routers.dashboard.rule=Host(`dashboard.homelab.local`)"
+      - "traefik.http.routers.dashboard.entrypoints=websecure"
+      - "traefik.http.routers.dashboard.tls.certresolver=myresolver"
+      - "traefik.http.services.dashboard.loadbalancer.server.port=3000"
 ```
 
 ### Caddy
@@ -93,9 +223,40 @@ dashboard.homelab.local {
 
 ---
 
+## Local Development Setup
+
+If you wish to contribute or run LinxDash directly from source:
+
+```bash
+# 1. Clone repository
+git clone https://github.com/your-username/homelab-dashboard.git
+cd homelab-dashboard
+
+# 2. Install dependencies
+npm install
+
+# 3. Start development server (with tsx and Vite middleware)
+npm run dev
+
+# 4. Build production bundle (Vite + esbuild CJS server)
+npm run build
+
+# 5. Start production build
+npm start
+```
+
+---
+
 ## Security Architecture
 
-1. **Password Hashing**: Passwords are encrypted with `bcrypt` (10 rounds) before persistence.
-2. **Rate Limiting**: Brute-force protection limits failed login attempts (5 attempts per minute per IP).
-3. **SVG Sanitization**: All uploaded SVG files are sanitized to strip inline JavaScript, event listeners, and dangerous URI schemes.
-4. **ETag & Caching**: Public configuration requests leverage ETags (`W/"<hash>"`) and return HTTP 304 Not Modified when configuration has not changed.
+1. **Password Hashing**: Passwords are encrypted with `bcrypt` (10 salt rounds) before persistence.
+2. **Brute-Force Mitigation**: Login endpoints enforce request throttling and rate limiting.
+3. **SVG Sanitization**: All uploaded vector icons pass through an aggressive DOM sanitizer stripping `<script>`, inline event handlers (`onload`, `onerror`), and `javascript:` URIs.
+4. **ETag & Caching**: Public configuration and static asset routes provide HTTP 304 caching and immutable cache-control headers.
+5. **Non-Root Execution**: The container strictly executes as unprivileged user `node:node`.
+
+---
+
+## License
+
+This project is licensed under the [MIT License](LICENSE).

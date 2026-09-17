@@ -3,110 +3,199 @@
 @custom-variant dark (&:where(.dark, .dark *));
 
 @layer base {
+  :root {
+    --apple-font: "Vazirmatn", -apple-system, BlinkMacSystemFont, Tahoma, sans-serif;
+    --apple-blur-sm: 12px;
+    --apple-blur-md: 20px;
+    --apple-blur-lg: 32px;
+    --ease-apple-spring: cubic-bezier(0.16, 1, 0.3, 1);
+    --ease-apple-bounce: cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+
+  *, *::before, *::after {
+    font-family: var(--apple-font) !important;
+  }
+
   html, body {
-    font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
+    direction: rtl !important;
+    font-family: var(--apple-font) !important;
+    font-feature-settings: "ss01" on, "ss02" on;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+  }
+
+  input, button, select, textarea {
+    font-family: var(--apple-font) !important;
   }
 
   code, pre, kbd, samp {
-    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    font-family: "Vazirmatn", ui-monospace, monospace !important;
   }
 }
 
-/* Glassmorphism Keyframes and Ambient Glow Animations */
-@keyframes orb-float-1 {
-  0%, 100% {
-    transform: translate(0px, 0px) scale(1);
-  }
-  33% {
-    transform: translate(30px, -50px) scale(1.08);
-  }
-  66% {
-    transform: translate(-20px, 20px) scale(0.95);
-  }
+/* ========================================================================= */
+/* 1. Apple-Inspired Glassmorphism Design System Tokens */
+/* ========================================================================= */
+
+/* Frosted Glass Cards (Dark & Light) */
+.apple-glass {
+  background: rgba(18, 24, 38, 0.65);
+  backdrop-filter: blur(var(--apple-blur-md)) saturate(180%);
+  -webkit-backdrop-filter: blur(var(--apple-blur-md)) saturate(180%);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.36);
 }
 
-@keyframes orb-float-2 {
-  0%, 100% {
-    transform: translate(0px, 0px) scale(1);
-  }
-  33% {
-    transform: translate(-40px, 40px) scale(1.05);
-  }
-  66% {
-    transform: translate(25px, -30px) scale(0.92);
-  }
+.apple-glass-subtle {
+  background: rgba(255, 255, 255, 0.04);
+  backdrop-filter: blur(var(--apple-blur-sm)) saturate(160%);
+  -webkit-backdrop-filter: blur(var(--apple-blur-sm)) saturate(160%);
+  border: 1px solid rgba(255, 255, 255, 0.08);
 }
 
-@keyframes orb-float-3 {
-  0%, 100% {
-    transform: translate(0px, 0px) scale(1);
-  }
-  50% {
-    transform: translate(35px, 35px) scale(1.1);
-  }
-}
-
-@keyframes pulse-slow {
-  0%, 100% {
-    opacity: 0.4;
-  }
-  50% {
-    opacity: 0.7;
-  }
-}
-
-.animate-orb-1 {
-  animation: orb-float-1 18s ease-in-out infinite;
-}
-
-.animate-orb-2 {
-  animation: orb-float-2 22s ease-in-out infinite;
-}
-
-.animate-orb-3 {
-  animation: orb-float-3 20s ease-in-out infinite;
-}
-
-.animate-pulse-slow {
-  animation: pulse-slow 8s ease-in-out infinite;
-}
-
-/* Custom Glassmorphism Classes */
-.glass-card {
-  background: rgba(255, 255, 255, 0.05);
-  backdrop-filter: blur(16px) saturate(180%);
-  -webkit-backdrop-filter: blur(16px) saturate(180%);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
-}
-
-.glass-card-light {
-  background: rgba(255, 255, 255, 0.75);
-  backdrop-filter: blur(16px) saturate(180%);
-  -webkit-backdrop-filter: blur(16px) saturate(180%);
-  border: 1px solid rgba(255, 255, 255, 0.6);
-  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.06);
-}
-
-.glass-nav {
-  background: rgba(15, 23, 42, 0.65);
-  backdrop-filter: blur(20px) saturate(190%);
-  -webkit-backdrop-filter: blur(20px) saturate(190%);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  box-shadow: 0 10px 40px -10px rgba(0, 0, 0, 0.5);
-}
-
-.glass-input {
+.apple-glass-pill {
   background: rgba(255, 255, 255, 0.06);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(16px) saturate(170%);
+  -webkit-backdrop-filter: blur(16px) saturate(170%);
   border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: inset 0 1px 1px 0 rgba(255, 255, 255, 0.15), 0 4px 16px -2px rgba(0, 0, 0, 0.25);
 }
 
-.glass-input:focus {
-  background: rgba(255, 255, 255, 0.1);
-  border-color: rgba(99, 102, 241, 0.6);
-  box-shadow: 0 0 20px rgba(99, 102, 241, 0.25);
+/* Light Theme Glass Tokens */
+:not(.dark) .apple-glass {
+  background: rgba(255, 255, 255, 0.78);
+  backdrop-filter: blur(var(--apple-blur-md)) saturate(180%);
+  -webkit-backdrop-filter: blur(var(--apple-blur-md)) saturate(180%);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  box-shadow: 0 8px 30px -4px rgba(0, 0, 0, 0.07), 0 1px 2px 0 rgba(0, 0, 0, 0.04);
+}
+
+:not(.dark) .apple-glass-subtle {
+  background: rgba(255, 255, 255, 0.55);
+  backdrop-filter: blur(var(--apple-blur-sm)) saturate(160%);
+  -webkit-backdrop-filter: blur(var(--apple-blur-sm)) saturate(160%);
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  box-shadow: 0 4px 16px -2px rgba(0, 0, 0, 0.04);
+}
+
+:not(.dark) .apple-glass-pill {
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(16px) saturate(170%);
+  -webkit-backdrop-filter: blur(16px) saturate(170%);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+}
+
+/* Smooth Interactive States */
+.apple-card-hover {
+  transition: transform 220ms var(--ease-apple-spring),
+              box-shadow 220ms var(--ease-apple-spring),
+              border-color 220ms var(--ease-apple-spring),
+              background 220ms ease;
+}
+
+.apple-press-feedback:active {
+  transform: scale(0.975);
+}
+
+/* ========================================================================= */
+/* 2. Atmospheric Ambient Aurora & Spatial Background Animations */
+/* ========================================================================= */
+@keyframes spatial-orbit-1 {
+  0%, 100% {
+    transform: translate(0px, 0px) scale(1);
+  }
+  33% {
+    transform: translate(45px, -35px) scale(1.06);
+  }
+  66% {
+    transform: translate(-30px, 30px) scale(0.96);
+  }
+}
+
+@keyframes spatial-orbit-2 {
+  0%, 100% {
+    transform: translate(0px, 0px) scale(1);
+  }
+  33% {
+    transform: translate(-40px, 45px) scale(1.08);
+  }
+  66% {
+    transform: translate(35px, -25px) scale(0.94);
+  }
+}
+
+@keyframes spatial-orbit-3 {
+  0%, 100% {
+    transform: translate(0px, 0px) scale(1);
+  }
+  50% {
+    transform: translate(30px, 40px) scale(1.05);
+  }
+}
+
+.animate-spatial-1 {
+  animation: spatial-orbit-1 28s ease-in-out infinite;
+}
+
+.animate-spatial-2 {
+  animation: spatial-orbit-2 34s ease-in-out infinite;
+}
+
+.animate-spatial-3 {
+  animation: spatial-orbit-3 30s ease-in-out infinite;
+}
+
+/* Reduced Motion Fallback */
+@media (prefers-reduced-motion: reduce) {
+  .animate-spatial-1,
+  .animate-spatial-2,
+  .animate-spatial-3,
+  .animate-pulse,
+  .animate-spin {
+    animation: none !important;
+    transition: none !important;
+  }
+
+  .apple-card-hover,
+  .apple-press-feedback,
+  .app-card-magnetic {
+    transform: none !important;
+    transition: none !important;
+    will-change: auto !important;
+  }
+}
+
+/* Hardware-accelerated magnetic card hover base & touch device exclusion */
+.app-card-magnetic {
+  backface-visibility: hidden;
+  -webkit-font-smoothing: subpixel-antialiased;
+}
+
+@media (hover: none) or (pointer: coarse) {
+  .app-card-magnetic {
+    transform: none !important;
+    transition: none !important;
+    will-change: auto !important;
+  }
+}
+
+/* Custom scrollbars for clean macOS feel */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(150, 150, 150, 0.25);
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(150, 150, 150, 0.45);
 }

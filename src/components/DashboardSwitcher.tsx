@@ -27,67 +27,43 @@ export const DashboardSwitcher: React.FC<DashboardSwitcherProps> = ({
   return (
     <div
       id="quick-dashboard-switcher"
-      className={`inline-flex items-center p-1 rounded-2xl bg-white/[0.06] border border-white/[0.12] shadow-inner backdrop-blur-xl gap-1 select-none ${className}`}
+      className={`inline-flex items-center p-1 rounded-2xl bg-slate-200/70 dark:bg-white/[0.06] border border-slate-300/80 dark:border-white/[0.12] backdrop-blur-xl gap-1 select-none shadow-xs ${className}`}
     >
-      {/* 1. Public Dashboard Button */}
+      {/* 1. Public Dashboard Segment */}
       <button
         type="button"
         id="switch-dashboard-public"
         onClick={onNavigatePublic}
-        title="Public Homelab Launcher"
-        className={`flex flex-col items-center justify-center px-3.5 py-1.5 rounded-xl transition-all duration-200 cursor-pointer min-w-[76px] ${
+        title="داشبورد عمومی هوم‌لب"
+        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl transition-all duration-200 cursor-pointer min-h-[32px] ${
           currentDashboard === 'public'
-            ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-md shadow-blue-500/30 font-bold border border-white/20'
-            : 'text-slate-300 hover:text-white hover:bg-white/[0.08]'
+            ? 'bg-white dark:bg-gradient-to-r dark:from-blue-600 dark:to-indigo-600 text-slate-900 dark:text-white shadow-sm dark:shadow-md dark:shadow-blue-500/25 font-bold border border-slate-200/60 dark:border-white/20'
+            : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-white/40 dark:hover:bg-white/[0.06]'
         }`}
       >
-        <div className="flex items-center gap-1.5 leading-none">
-          <Globe className={`w-3.5 h-3.5 ${currentDashboard === 'public' ? 'text-white' : 'text-blue-400'}`} />
-          <span className="text-xs font-bold">Public</span>
-        </div>
-        <div className="mt-0.5 text-[9px] font-semibold flex items-center gap-0.5 leading-none">
-          {currentUser ? (
-            <span className="text-emerald-400 flex items-center gap-0.5">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 inline-block animate-pulse" />
-              Signed
-            </span>
-          ) : (
-            <span className="text-slate-400">Open</span>
-          )}
-        </div>
+        <Globe className={`w-3.5 h-3.5 ${currentDashboard === 'public' ? 'text-blue-600 dark:text-white' : 'text-slate-400'}`} />
+        <span className="text-xs font-bold tracking-tight">عمومی</span>
       </button>
 
-      {/* 2. Admin Control Panel Button */}
+      {/* 2. Admin Control Panel Segment */}
       <button
         type="button"
         id="switch-dashboard-admin"
         onClick={handleAdminClick}
         title={
           isAdminAuthorized
-            ? 'Switch to Admin Control Panel'
-            : 'Admin Control Panel (Click to Sign In)'
+            ? 'تغییر به کنترل‌پنل مدیریت'
+            : 'کنترل‌پنل مدیریت (برای ورود کلیک کنید)'
         }
-        className={`flex flex-col items-center justify-center px-3.5 py-1.5 rounded-xl transition-all duration-200 cursor-pointer min-w-[76px] ${
+        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl transition-all duration-200 cursor-pointer min-h-[32px] ${
           currentDashboard === 'admin'
-            ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-md shadow-blue-500/30 font-bold border border-white/20'
-            : 'text-slate-300 hover:text-white hover:bg-white/[0.08]'
+            ? 'bg-white dark:bg-gradient-to-r dark:from-blue-600 dark:to-indigo-600 text-slate-900 dark:text-white shadow-sm dark:shadow-md dark:shadow-blue-500/25 font-bold border border-slate-200/60 dark:border-white/20'
+            : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-white/40 dark:hover:bg-white/[0.06]'
         }`}
       >
-        <div className="flex items-center gap-1.5 leading-none">
-          <LayoutDashboard className={`w-3.5 h-3.5 ${currentDashboard === 'admin' ? 'text-white' : 'text-indigo-400'}`} />
-          <span className="text-xs font-bold">Admin</span>
-          {!isAdminAuthorized && <Lock className="w-2.5 h-2.5 opacity-60 ml-0.5" />}
-        </div>
-        <div className="mt-0.5 text-[9px] font-semibold flex items-center gap-0.5 leading-none">
-          {isAdminAuthorized ? (
-            <span className={`${currentDashboard === 'admin' ? 'text-blue-100' : 'text-emerald-400'} flex items-center gap-0.5`}>
-              <span className={`w-1.5 h-1.5 rounded-full ${currentDashboard === 'admin' ? 'bg-white' : 'bg-emerald-400'} inline-block`} />
-              Signed
-            </span>
-          ) : (
-            <span className="text-slate-400">Sign In</span>
-          )}
-        </div>
+        <LayoutDashboard className={`w-3.5 h-3.5 ${currentDashboard === 'admin' ? 'text-blue-600 dark:text-white' : 'text-slate-400'}`} />
+        <span className="text-xs font-bold tracking-tight">مدیریت</span>
+        {!isAdminAuthorized && <Lock className="w-3 h-3 opacity-60 ml-0.5" />}
       </button>
     </div>
   );

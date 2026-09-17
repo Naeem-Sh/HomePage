@@ -8,7 +8,9 @@ import {
   SystemStats,
   SystemInfo,
   AuditLog,
-  TestResult
+  TestResult,
+  BackupItem,
+  ActivityStats
 } from '../types';
 
 const TOKEN_KEY = 'linxdash_auth_token';
@@ -46,15 +48,39 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
     headers
   });
 
+  const contentType = response.headers.get('content-type') || '';
+  const isJson = contentType.includes('application/json');
+
   if (!response.ok) {
-    let errorMsg = 'An error occurred';
-    try {
-      const json = await response.json();
-      errorMsg = json.error || json.message || errorMsg;
-    } catch {
-      errorMsg = response.statusText || errorMsg;
+    let errorMsg = `خطای ارتباط با سرور (${response.status})`;
+    if (isJson) {
+      try {
+        const json = await response.json();
+        errorMsg = json.error || json.message || errorMsg;
+      } catch {
+        // fallback
+      }
+    } else {
+      const rawText = await response.text();
+      if (rawText.includes('<!doctype') || rawText.includes('<!DOCTYPE')) {
+        errorMsg = `مسیر سرور در دسترس نیست یا سرور در حال بارگذاری است (${response.status})`;
+      } else if (rawText.trim().length > 0 && rawText.length < 200) {
+        errorMsg = rawText.trim();
+      }
     }
     throw new Error(errorMsg);
+  }
+
+  if (!isJson) {
+    const rawText = await response.text();
+    if (rawText.includes('<!doctype') || rawText.includes('<!DOCTYPE')) {
+      throw new Error('سرور در حال بارگذاری است یا مسیر نامعتبر است. لطفاً صفحه را تازه‌سازی کنید.');
+    }
+    try {
+      return JSON.parse(rawText) as T;
+    } catch {
+      throw new Error('قالب پاسخ سرور معتبر نیست.');
+    }
   }
 
   return response.json();
@@ -72,7 +98,11 @@ export const api = {
       throw new Error('NOT_MODIFIED');
     }
     if (!res.ok) {
-      throw new Error('Failed to load configuration');
+      throw new Error('خطا در دریافت تنظیمات سرور');
+    }
+    const contentType = res.headers.get('content-type') || '';
+    if (!contentType.includes('application/json')) {
+      throw new Error('سرور در حال راه‌اندازی است. لطفاً صفحه را تازه‌سازی کنید.');
     }
     return res.json();
   },
@@ -121,6 +151,7 @@ export const api = {
     system: SystemInfo;
     settings: SystemSettings;
     recentLogs: AuditLog[];
+    activity?: ActivityStats;
   }> => {
     return request('/api/admin/overview');
   },
@@ -290,7 +321,62 @@ export const api = {
     });
   },
 
-  // Backup & Restore
+  uploadDocument: async (file: File): Promise<{ success: boolean; url: string; filename: string; originalName: string; size: number; mimetype: string }> => {
+    const formData = new FormData();
+    formData.append('file', file);
+    return request('/api/admin/upload/document', {
+      method: 'POST',
+      body: formData
+    });
+  },
+
+  listDocuments: (): Promise<Array<{ filename: string; url: string; size: number; createdAt: string; ext: string }>> => {
+    return request('/api/admin/documents');
+  },
+
+  deleteDocument: (filename: string): Promise<{ success: boolean; filename: string }> => {
+    return request(`/api/admin/documents/${encodeURIComponent(filename)}`, {
+      method: 'DELETE'
+    });
+  },
+
+  // Backup & Restore (Full ZIP & Legacy JSON)
+  listBackups: (): Promise<BackupItem[]> => {
+    return request('/api/admin/backups');
+  },
+
+  createBackup: (): Promise<BackupItem> => {
+    return request('/api/admin/backups', {
+      method: 'POST'
+    });
+  },
+
+  restoreBackup: (id: string): Promise<{ success: boolean; stats: any }> => {
+    return request(`/api/admin/backups/${encodeURIComponent(id)}/restore`, {
+      method: 'POST'
+    });
+  },
+
+  uploadAndRestoreBackup: async (file: File): Promise<{ success: boolean; stats: any }> => {
+    const formData = new FormData();
+    formData.append('backupZip', file);
+    return request('/api/admin/backups/upload-restore', {
+      method: 'POST',
+      body: formData
+    });
+  },
+
+  deleteBackup: (id: string): Promise<{ success: boolean }> => {
+    return request(`/api/admin/backups/${encodeURIComponent(id)}`, {
+      method: 'DELETE'
+    });
+  },
+
+  getBackupDownloadUrl: (id: string): string => {
+    const token = getStoredToken();
+    return `/api/admin/backups/${encodeURIComponent(id)}/download${token ? `?token=${encodeURIComponent(token)}` : ''}`;
+  },
+
   exportBackup: async (): Promise<any> => {
     return request('/api/admin/export');
   },
@@ -299,6 +385,13 @@ export const api = {
     return request('/api/admin/import', {
       method: 'POST',
       body: JSON.stringify({ backup })
+    });
+  },
+
+  resetDatabase: async (options?: { wipeUploads?: boolean }): Promise<{ success: boolean; message: string }> => {
+    return request('/api/admin/reset', {
+      method: 'POST',
+      body: JSON.stringify(options || {})
     });
   },
 

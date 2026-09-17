@@ -116,13 +116,13 @@ export default function App() {
   // 1. Initial Loading Screen
   if (isLoading && !publicConfig) {
     return (
-      <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex flex-col items-center justify-center p-4">
+      <div className="min-h-screen bg-slate-50 dark:bg-[#070b14] text-slate-900 dark:text-slate-100 flex flex-col items-center justify-center p-4" dir="rtl">
         <div className="flex flex-col items-center gap-3">
           <div className="w-12 h-12 rounded-2xl bg-blue-600/10 dark:bg-blue-500/20 text-blue-600 dark:text-blue-400 border border-blue-500/20 flex items-center justify-center animate-pulse">
             <Server className="w-6 h-6" />
           </div>
           <p className="text-xs font-semibold text-slate-500 dark:text-slate-400">
-            Connecting to Linux Homepage Daemon...
+            در حال اتصال به دیمن هوم‌لب لینوکس...
           </p>
         </div>
       </div>
@@ -132,19 +132,19 @@ export default function App() {
   // 2. Fatal Server Error Screen
   if (error && !publicConfig) {
     return (
-      <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex flex-col items-center justify-center p-4">
+      <div className="min-h-screen bg-slate-50 dark:bg-[#070b14] text-slate-900 dark:text-slate-100 flex flex-col items-center justify-center p-4" dir="rtl">
         <div className="max-w-md w-full p-6 rounded-3xl bg-white dark:bg-slate-900 border border-red-200 dark:border-red-900/60 shadow-xl text-center space-y-4">
           <div className="w-12 h-12 rounded-full bg-red-100 dark:bg-red-950 text-red-600 flex items-center justify-center mx-auto">
             <Server className="w-6 h-6" />
           </div>
-          <h2 className="text-lg font-bold text-slate-900 dark:text-slate-100">Service Unreachable</h2>
+          <h2 className="text-lg font-bold text-slate-900 dark:text-slate-100">خطا در اتصال به سرویس</h2>
           <p className="text-xs text-red-600 dark:text-red-400">{error}</p>
           <button
             onClick={loadInitialData}
             className="px-4 py-2 rounded-xl text-xs font-semibold bg-blue-600 hover:bg-blue-700 text-white flex items-center justify-center gap-2 mx-auto cursor-pointer"
           >
             <RefreshCw className="w-4 h-4" />
-            <span>Retry Connection</span>
+            <span>تلاش مجدد برای اتصال</span>
           </button>
         </div>
       </div>
@@ -203,14 +203,29 @@ export default function App() {
         ) : (
           <div className="min-h-screen bg-slate-50 dark:bg-[#0B0F19] text-slate-900 dark:text-slate-100 flex flex-col transition-colors duration-300">
             {/* Header with Switcher */}
-            <header className="border-b border-slate-200/80 dark:border-white/10 bg-white/80 dark:bg-slate-900/50 backdrop-blur-md px-4 sm:px-8 py-3.5 flex items-center justify-between">
+            <header className="border-b border-slate-200/80 dark:border-white/10 bg-white/80 dark:bg-slate-900/50 backdrop-blur-md px-4 sm:px-8 py-3.5 flex items-center justify-between" dir="rtl">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-blue-600/10 text-blue-600 dark:text-blue-400 border border-blue-500/20 flex items-center justify-center font-black shadow-xs">
-                  ADM
-                </div>
-                <div>
-                  <h2 className="text-sm font-bold text-slate-900 dark:text-slate-100 leading-tight">Admin Control Panel</h2>
-                  <p className="text-[11px] text-slate-500 dark:text-slate-400">Authentication Required</p>
+                {publicConfig.settings?.logoUrl ? (
+                  <img
+                    src={publicConfig.settings.logoUrl}
+                    alt={publicConfig.settings.title || 'لوگو'}
+                    className="h-12 sm:h-14 md:h-16 w-auto max-w-[200px] object-contain border-0 outline-none shadow-none bg-transparent select-none transition-transform duration-200 hover:scale-105"
+                    referrerPolicy="no-referrer"
+                  />
+                ) : (
+                  <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-2xl bg-blue-600/10 text-blue-600 dark:text-blue-400 border border-blue-500/20 flex items-center justify-center font-black shadow-xs">
+                    مدیر
+                  </div>
+                )}
+                <div className="flex flex-col justify-center">
+                  <h2 className="text-sm sm:text-base font-black tracking-tight text-slate-900 dark:text-slate-100 leading-tight">
+                    {publicConfig.settings?.title || 'هوم‌لب لینوکس'}
+                  </h2>
+                  {publicConfig.settings?.subtitle && (
+                    <p className="text-[10px] uppercase tracking-wider text-slate-500 dark:text-slate-400 font-bold">
+                      {publicConfig.settings.subtitle}
+                    </p>
+                  )}
                 </div>
               </div>
               <div className="flex items-center gap-3">
@@ -225,7 +240,7 @@ export default function App() {
               </div>
             </header>
 
-            <div className="flex-1 flex items-center justify-center p-4">
+            <div className="flex-1 flex items-center justify-center p-4" dir="rtl">
               <div className="max-w-md w-full p-6 sm:p-8 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-white/10 shadow-2xl space-y-5">
                 <div className="text-center space-y-2">
                   <div className="w-14 h-14 rounded-2xl bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-800 flex items-center justify-center mx-auto shadow-md shadow-blue-500/10">
@@ -233,10 +248,10 @@ export default function App() {
                   </div>
                   <div>
                     <h3 className="text-lg font-bold text-slate-900 dark:text-slate-100 tracking-tight">
-                      Administrator Sign In
+                      ورود به پنل مدیریت
                     </h3>
                     <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                      Enter administrator credentials to access system settings, app configuration, and user management.
+                      برای دسترسی به تنظیمات سیستم، پیکربندی سرویس‌ها و مدیریت کاربران وارد شوید.
                     </p>
                   </div>
                 </div>
@@ -250,10 +265,10 @@ export default function App() {
 
                   <div>
                     <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                      Username
+                      نام کاربری
                     </label>
                     <div className="relative">
-                      <User className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                      <User className="absolute right-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                       <input
                         id="admin-login-username"
                         type="text"
@@ -261,26 +276,26 @@ export default function App() {
                         autoFocus
                         value={adminUsername}
                         onChange={(e) => setAdminUsername(e.target.value)}
-                        placeholder="Admin username"
-                        className="w-full pl-10 pr-4 py-2.5 rounded-xl text-sm bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-white/10 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-blue-500 focus:outline-none transition-all"
+                        placeholder="نام کاربری مدیر (admin)"
+                        className="w-full pr-10 pl-4 py-2.5 rounded-xl text-sm bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-white/10 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-blue-500 focus:outline-none transition-all text-right"
                       />
                     </div>
                   </div>
 
                   <div>
                     <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                      Password
+                      رمز عبور
                     </label>
                     <div className="relative">
-                      <KeyRound className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                      <KeyRound className="absolute right-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                       <input
                         id="admin-login-password"
                         type="password"
                         required
                         value={adminPassword}
                         onChange={(e) => setAdminPassword(e.target.value)}
-                        placeholder="Admin password"
-                        className="w-full pl-10 pr-4 py-2.5 rounded-xl text-sm bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-white/10 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-blue-500 focus:outline-none transition-all"
+                        placeholder="رمز عبور مدیر"
+                        className="w-full pr-10 pl-4 py-2.5 rounded-xl text-sm bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-white/10 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-blue-500 focus:outline-none transition-all text-right"
                       />
                     </div>
                   </div>
@@ -292,11 +307,11 @@ export default function App() {
                     className="w-full py-2.5 px-4 rounded-xl font-bold text-sm bg-blue-600 hover:bg-blue-500 hover:scale-[1.01] active:scale-[0.98] text-white shadow-lg shadow-blue-600/30 transition-all duration-200 flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
                   >
                     {isAdminLoggingIn ? (
-                      <span>Authenticating...</span>
+                      <span>در حال احراز هویت...</span>
                     ) : (
                       <>
-                        <LogIn className="w-4 h-4" />
-                        <span>Sign In to Admin Panel</span>
+                        <LogIn className="w-4 h-4 rtl:rotate-180" />
+                        <span>ورود به پنل مدیریت</span>
                       </>
                     )}
                   </button>
@@ -306,8 +321,8 @@ export default function App() {
                     onClick={() => setViewMode('home')}
                     className="w-full py-2 text-xs text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 cursor-pointer flex items-center justify-center gap-1.5"
                   >
-                    <ArrowLeft className="w-3.5 h-3.5" />
-                    <span>Return to Public Homepage</span>
+                    <ArrowLeft className="w-3.5 h-3.5 rtl:rotate-180" />
+                    <span>بازگشت به صفحه عمومی</span>
                   </button>
                 </form>
               </div>
