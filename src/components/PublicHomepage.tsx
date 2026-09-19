@@ -174,14 +174,6 @@ export const PublicHomepage: React.FC<PublicHomepageProps> = ({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
 
-  // Time-aware greeting
-  const getGreeting = () => {
-    const hour = new Date().getHours();
-    if (hour >= 5 && hour < 12) return 'صبح بخیر';
-    if (hour >= 12 && hour < 17) return 'ظهر بخیر';
-    if (hour >= 17 && hour < 21) return 'عصر بخیر';
-    return 'شب بخیر';
-  };
 
   // Drag & Drop handlers
   const handleDragStart = (e: React.DragEvent, appId: string) => {
@@ -542,11 +534,11 @@ export const PublicHomepage: React.FC<PublicHomepageProps> = ({
             </div>
 
             <h2 className="text-base sm:text-lg font-black tracking-tight text-slate-900 dark:text-white">
-              {getGreeting()}، <span className="text-blue-600 dark:text-blue-400">{currentUser ? currentUser.username : 'کاربر گرامی'}</span>
+              وقت بخیر؛ به <span className="text-blue-600 dark:text-blue-400">پرتال سامانه‌های داخلی</span> خوش آمدید
             </h2>
 
             <p className="text-xs text-slate-500 dark:text-slate-400 font-normal">
-              دسترسی سریع به برنامه‌ها و سرویس‌ها
+              {currentUser ? `کاربر گرامی (${currentUser.username}) • ` : ''}دسترسی سریع به برنامه‌ها و سرویس‌ها
             </p>
           </div>
 

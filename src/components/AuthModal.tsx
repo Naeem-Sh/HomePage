@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, Lock, User, KeyRound, LogIn, Sparkles } from 'lucide-react';
+import { X, Lock, User, KeyRound, LogIn } from 'lucide-react';
 import { api, setStoredToken } from '../lib/api';
 import { AuthResponse } from '../types';
 
@@ -32,12 +32,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onSuccess
     } finally {
       setIsLoading(false);
     }
-  };
-
-  const handleQuickFill = () => {
-    setUsername('admin');
-    setPassword('123');
-    setError(null);
   };
 
   return (
@@ -134,21 +128,12 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onSuccess
           </div>
         </form>
 
-        {/* Footer info: simple & concise */}
-        <div className="pt-3 border-t border-white/10 flex items-center justify-between text-xs text-slate-400">
-          <button
-            type="button"
-            onClick={handleQuickFill}
-            className="flex items-center gap-1 text-slate-400 hover:text-blue-400 transition-colors cursor-pointer text-[11px]"
-          >
-            <Sparkles className="w-3 h-3 text-blue-400" />
-            <span>پیش‌فرض:</span>
-            <span className="text-slate-200 font-mono" dir="ltr">admin / 123</span>
-          </button>
+        {/* Footer */}
+        <div className="pt-3 border-t border-white/10 flex items-center justify-end text-xs text-slate-400">
           <button
             type="button"
             onClick={onClose}
-            className="text-slate-400 hover:text-white transition-colors cursor-pointer text-[11px]"
+            className="text-slate-400 hover:text-white transition-colors cursor-pointer text-xs px-3 py-1 rounded-lg hover:bg-white/5 font-medium"
           >
             انصراف
           </button>

@@ -85,6 +85,7 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    document.title = 'Home';
     loadInitialData();
   }, [loadInitialData]);
 

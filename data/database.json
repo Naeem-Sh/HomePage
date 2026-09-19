@@ -3,11 +3,11 @@
     {
       "id": "b9d9b472-65be-4d9f-98e2-f598540f8fd6",
       "username": "admin",
-      "passwordHash": "$2b$10$/mTKDZgAKLMoIpL1bLhZquqHOWG3AYb1cbCUAFwxXLqyuhQVEuvE6",
+      "passwordHash": "$2b$10$3YaLzeQg2i2SQGYu./cCZewhoNQgny5dCjAqj2sNQfGT8KdxtYoDa",
       "role": "admin",
       "isActive": true,
       "createdAt": "2026-09-14T14:13:06.001Z",
-      "lastLoginAt": "2026-09-19T05:44:01.578Z"
+      "lastLoginAt": "2026-09-19T08:16:13.578Z"
     }
   ],
   "categories": [
@@ -495,9 +495,17 @@
     "customFooterText": "Powered by Linux & Open Source",
     "showTelemetryBar": true,
     "telemetryPosition": "top",
-    "configVersion": "878ebeb8a1dd7fb2"
+    "configVersion": "e64943fd5d7a0803"
   },
   "auditLogs": [
+    {
+      "id": "939182ee-d334-42c0-be86-083bf0f78540",
+      "timestamp": "2026-09-19T08:16:13.579Z",
+      "user": "admin",
+      "action": "LOGIN_SUCCESS",
+      "details": "User logged in with role: admin",
+      "ip": "127.0.0.1"
+    },
     {
       "id": "d35feec7-a358-490d-96bf-2b336183548c",
       "timestamp": "2026-09-19T05:44:01.580Z",
