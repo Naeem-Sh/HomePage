@@ -63,7 +63,8 @@ import {
   ThemeMode,
   UploadedBackground,
   BackupItem,
-  ActivityStats
+  ActivityStats,
+  APP_VERSION
 } from '../types';
 import { api, setStoredToken } from '../lib/api';
 import { toPersianDigits, formatPersianDate, formatBytes } from '../lib/utils';
@@ -4545,17 +4546,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       )}
 
       {/* Footer */}
-      <footer className="w-full border-t border-slate-200/80 dark:border-white/10 bg-white/70 dark:bg-slate-900/70 px-4 sm:px-8 py-3.5 mt-auto relative z-10">
-        <div className="max-w-7xl mx-auto flex items-center justify-between text-xs text-slate-500 dark:text-slate-400 font-medium">
-          <span className="font-semibold text-slate-700 dark:text-slate-300" dir="ltr">
+      <footer className="w-full border-t border-slate-200/80 dark:border-white/10 bg-white/80 dark:bg-slate-900/80 backdrop-blur-2xl px-4 sm:px-8 py-3.5 mt-auto relative z-10">
+        <div className="max-w-7xl mx-auto flex items-center justify-between gap-4" dir="ltr">
+          <div className="inline-flex items-center gap-2 bg-[#f0f4f8] dark:bg-slate-800/90 border border-[#e2e8f0] dark:border-slate-700/80 px-3.5 py-1 rounded-full text-slate-600 dark:text-slate-300 font-sans font-medium text-[13px] shadow-2xs select-none">
+            <span className="w-2.5 h-2.5 rounded-full bg-[#10b981] inline-block shrink-0"></span>
+            <span className="leading-none">v{APP_VERSION}</span>
+          </div>
+          <span className="font-semibold text-slate-800 dark:text-slate-200 text-[13px] tracking-tight select-none">
             Developed by : N.Shaaeri
           </span>
-          <button
-            onClick={onNavigateHome}
-            className="text-blue-600 dark:text-blue-400 hover:underline transition-colors cursor-pointer font-bold text-[11px]"
-          >
-            مشاهده صفحه عمومی
-          </button>
         </div>
       </footer>
     </div>

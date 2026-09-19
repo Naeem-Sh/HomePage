@@ -21,7 +21,7 @@ import {
   SlidersHorizontal,
   ChevronRight
 } from 'lucide-react';
-import { Application, Category, SystemSettings, ThemeMode } from '../types';
+import { Application, Category, SystemSettings, ThemeMode, APP_VERSION } from '../types';
 import { AnalogClock } from './AnalogClock';
 import { ThemeToggle } from './ThemeToggle';
 import { AppCard } from './AppCard';
@@ -797,9 +797,13 @@ export const PublicHomepage: React.FC<PublicHomepageProps> = ({
       {/* ========================================================================= */}
       {/* 7. MINIMAL FOOTER */}
       {/* ========================================================================= */}
-      <footer className="w-full border-t border-slate-200/80 dark:border-white/[0.08] backdrop-blur-2xl bg-white/70 dark:bg-[#080d19]/80 px-4 sm:px-6 lg:px-8 py-3.5 mt-auto relative z-10">
-        <div className="max-w-7xl 2xl:max-w-[1920px] min-[2560px]:max-w-[2560px] mx-auto flex items-center justify-center text-xs text-slate-500 dark:text-slate-400 font-medium">
-          <span className="font-semibold text-slate-700 dark:text-slate-300" dir="ltr">
+      <footer className="w-full border-t border-slate-200/80 dark:border-white/[0.08] backdrop-blur-2xl bg-white/80 dark:bg-[#080d19]/80 px-4 sm:px-6 lg:px-8 py-3.5 mt-auto relative z-10">
+        <div className="max-w-7xl 2xl:max-w-[1920px] min-[2560px]:max-w-[2560px] mx-auto flex items-center justify-between gap-4" dir="ltr">
+          <div className="inline-flex items-center gap-2 bg-[#f0f4f8] dark:bg-slate-800/90 border border-[#e2e8f0] dark:border-slate-700/80 px-3.5 py-1 rounded-full text-slate-600 dark:text-slate-300 font-sans font-medium text-[13px] shadow-2xs select-none">
+            <span className="w-2.5 h-2.5 rounded-full bg-[#10b981] inline-block shrink-0"></span>
+            <span className="leading-none">v{APP_VERSION}</span>
+          </div>
+          <span className="font-semibold text-slate-800 dark:text-slate-200 text-[13px] tracking-tight select-none">
             Developed by : N.Shaaeri
           </span>
         </div>

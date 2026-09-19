@@ -101,6 +101,7 @@ router.get('/health', (_req: Request, res: Response) => {
   const mem = process.memoryUsage();
   res.json({
     status: 'healthy',
+    version: '2.0.0',
     timestamp: new Date().toISOString(),
     uptimeSeconds: Math.floor(process.uptime()),
     nodeVersion: process.version,

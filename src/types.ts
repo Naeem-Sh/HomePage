@@ -1,3 +1,5 @@
+export const APP_VERSION = '2.0.0';
+
 export type UserRole = 'admin';
 export type DashboardTarget = 'public' | 'admin';
 export type ThemeMode = 'light' | 'dark';
