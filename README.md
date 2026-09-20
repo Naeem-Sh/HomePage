@@ -169,9 +169,54 @@ Because your data is stored in the volume `homelab_data`, the old container and 
 | `DATA_DIR` | `/app/data` | Path to persistent storage directory for data, uploads, and backups |
 | `JWT_SECRET` | *(auto-generated)* | Cryptographic key used to sign and verify user session tokens |
 | `INITIAL_ADMIN_USER` | `admin` | Initial admin username created if database is empty on first boot |
-| `INITIAL_ADMIN_PASSWORD` | `admin` | Initial admin password created if database is empty on first boot |
+| `INITIAL_ADMIN_PASSWORD` | `123` | Initial admin password created if database is empty on first boot |
+| `RESET_ADMIN_PASSWORD` | `false` | Set to `true` to force reset admin password to INITIAL_ADMIN_PASSWORD |
 | `UPLOADS_DIR` | `$DATA_DIR/uploads` | Optional custom path for uploaded images and attachments |
 | `BACKUPS_DIR` | `$DATA_DIR/backups` | Optional custom path for backup archive files |
+
+---
+
+## 🚀 ارسال پروژه به گیت‌هاب (Pushing to GitHub)
+
+تمامی فایل‌های دیتابیس شخصی، آپلودها، لاگ‌ها و فایل‌های محیطی (`.env`) به صورت استاندارد در `.gitignore` قرار گرفته‌اند تا هیچ‌گونه اطلاعات شخصی یا حساسی به گیت‌هاب منتقل نشود.
+
+برای ارسال این پروژه به مخزن گیت‌هاب خود، مراحل زیر را در ترمینال پوشه پروژه اجرا کنید:
+
+```bash
+# ۱. ایجاد مخزن محلی گیت (در صورت نیاز)
+git init
+
+# ۲. افزودن تمام فایل‌های تمیز و بدون داده
+git add .
+
+# ۳. ثبت اولین کامیت
+git commit -m "feat: complete dockerized homelab dashboard"
+
+# ۴. تنظیم شاخه اصلی
+git branch -M main
+
+# ۵. اتصال به ریپوزیتوری گیت‌هاب شما (آدرس خود را جایگزین کنید)
+git remote add origin https://github.com/USERNAME/REPOSITORY_NAME.git
+
+# ۶. ارسال کدهای تمیز به گیت‌هاب
+git push -u origin main
+```
+
+---
+
+## 🔄 نحوه آپدیت برنامه روی سرور بدون حذف داده‌ها (Safe Server Updates)
+
+روی سرور، چون داده‌های شما در پوشه خارج از کانتینر (مانند `./data` یا `/opt/homelab-data`) ذخیره می‌شوند، می‌توانید با خیال راحت آخرین نسخه را دریافت و بیلد کنید:
+
+```bash
+# ۱. دریافت آخرین تغییرات از گیت‌هاب
+git pull origin main
+
+# ۲. بیلد مجدد ایمیج و استارت کانتینر بدون وقفه
+docker compose up -d --build
+```
+> **نکته بسیار مهم:** تمام برنامه‌ها، دسته‌بندی‌ها، لوگوهای آپلودشده، تنظیمات و **رمز عبور تغییریافته ادمین** بدون کوچک‌ترین تغییری در پوشه دائمی شما باقی خواهند ماند.
+
 
 ---
 

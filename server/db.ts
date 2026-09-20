@@ -1,3 +1,4 @@
+import 'dotenv/config';
 import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
@@ -6,21 +7,89 @@ import AdmZip from 'adm-zip';
 import * as XLSX from 'xlsx';
 import { DatabaseSchema, User, Category, Application, SystemSettings, AuditLog, BackupItem, ActivityStats } from './types';
 
-const DATA_DIR = process.env.DATA_DIR || path.join(process.cwd(), 'data');
+/**
+ * Resolves the persistent data storage directory:
+ * 1. Explicit DATA_DIR environment variable (e.g. DATA_DIR=/opt/homelab-data or /var/lib/homelab-data)
+ * 2. Local configuration file: .datadir or data-dir.conf
+ * 3. Default fallback: ./data in the current working directory
+ */
+function resolveDataDir(): string {
+  if (process.env.DATA_DIR && process.env.DATA_DIR.trim()) {
+    return path.resolve(process.env.DATA_DIR.trim());
+  }
+
+  const configFiles = [
+    path.join(process.cwd(), '.datadir'),
+    path.join(process.cwd(), 'data-dir.conf')
+  ];
+
+  for (const cf of configFiles) {
+    if (fs.existsSync(cf)) {
+      try {
+        const line = fs.readFileSync(cf, 'utf-8').trim().split('\n')[0].trim();
+        if (line && !line.startsWith('#')) {
+          return path.resolve(line);
+        }
+      } catch {
+        // ignore error and try next
+      }
+    }
+  }
+
+  return path.join(process.cwd(), 'data');
+}
+
+const DATA_DIR = resolveDataDir();
 const UPLOADS_DIR = process.env.UPLOADS_DIR || path.join(DATA_DIR, 'uploads');
 const BACKUPS_DIR = process.env.BACKUPS_DIR || path.join(DATA_DIR, 'backups');
 const DB_FILE = process.env.DB_FILE || path.join(DATA_DIR, 'database.json');
 const VISITS_FILE = process.env.VISITS_FILE || path.join(DATA_DIR, 'visits.json');
 
-// Ensure directories exist
-if (!fs.existsSync(DATA_DIR)) {
-  fs.mkdirSync(DATA_DIR, { recursive: true });
+// Ensure target directories exist safely
+try {
+  if (!fs.existsSync(DATA_DIR)) {
+    fs.mkdirSync(DATA_DIR, { recursive: true });
+  }
+  if (!fs.existsSync(UPLOADS_DIR)) {
+    fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+  }
+  if (!fs.existsSync(BACKUPS_DIR)) {
+    fs.mkdirSync(BACKUPS_DIR, { recursive: true });
+  }
+} catch (dirErr) {
+  console.error(`[Storage Warning] Failed to initialize storage directory at ${DATA_DIR}:`, dirErr);
 }
-if (!fs.existsSync(UPLOADS_DIR)) {
-  fs.mkdirSync(UPLOADS_DIR, { recursive: true });
-}
-if (!fs.existsSync(BACKUPS_DIR)) {
-  fs.mkdirSync(BACKUPS_DIR, { recursive: true });
+
+// Auto-migration: If DATA_DIR is an external persistent path and is fresh,
+// seamlessly migrate data & uploads from the local project ./data folder!
+const localProjectDataDir = path.join(process.cwd(), 'data');
+if (path.resolve(DATA_DIR) !== path.resolve(localProjectDataDir)) {
+  try {
+    const localDbFile = path.join(localProjectDataDir, 'database.json');
+    if (!fs.existsSync(DB_FILE) && fs.existsSync(localDbFile)) {
+      console.info(`[Storage Migration] Auto-migrating existing database from ${localDbFile} -> ${DB_FILE}`);
+      fs.copyFileSync(localDbFile, DB_FILE);
+    }
+
+    const localUploadsDir = path.join(localProjectDataDir, 'uploads');
+    if (fs.existsSync(localUploadsDir)) {
+      const copyRecursive = (src: string, dest: string) => {
+        if (!fs.existsSync(dest)) fs.mkdirSync(dest, { recursive: true });
+        for (const entry of fs.readdirSync(src, { withFileTypes: true })) {
+          const srcPath = path.join(src, entry.name);
+          const destPath = path.join(dest, entry.name);
+          if (entry.isDirectory()) {
+            copyRecursive(srcPath, destPath);
+          } else if (!fs.existsSync(destPath)) {
+            fs.copyFileSync(srcPath, destPath);
+          }
+        }
+      };
+      copyRecursive(localUploadsDir, UPLOADS_DIR);
+    }
+  } catch (migErr) {
+    console.error('[Storage Migration Warning] Could not auto-migrate local data:', migErr);
+  }
 }
 
 function generateId(): string {
@@ -441,6 +510,12 @@ class DatabaseService {
       if (fs.existsSync(DB_FILE)) {
         const raw = fs.readFileSync(DB_FILE, 'utf-8');
         const parsed = JSON.parse(raw);
+        // Keep an automatic .bak copy of last known good database file
+        try {
+          fs.writeFileSync(`${DB_FILE}.bak`, raw, 'utf-8');
+        } catch {
+          // ignore
+        }
         return {
           users: parsed.users || [],
           categories: parsed.categories || DEFAULT_CATEGORIES,
@@ -450,7 +525,26 @@ class DatabaseService {
         };
       }
     } catch (e) {
-      console.error('Error loading database file, initializing defaults:', e);
+      console.error('Error loading database file, checking backup file:', e);
+    }
+
+    // Try fallback to .bak if primary was corrupted or accidentally replaced with empty file
+    try {
+      const bakFile = `${DB_FILE}.bak`;
+      if (fs.existsSync(bakFile)) {
+        const rawBak = fs.readFileSync(bakFile, 'utf-8');
+        const parsedBak = JSON.parse(rawBak);
+        console.info('Successfully recovered database from .bak snapshot');
+        return {
+          users: parsedBak.users || [],
+          categories: parsedBak.categories || DEFAULT_CATEGORIES,
+          applications: parsedBak.applications || DEFAULT_APPLICATIONS,
+          settings: { ...DEFAULT_SETTINGS, ...(parsedBak.settings || {}) },
+          auditLogs: parsedBak.auditLogs || []
+        };
+      }
+    } catch (bakErr) {
+      console.error('Backup recovery error:', bakErr);
     }
 
     const initial: DatabaseSchema = {
@@ -467,9 +561,17 @@ class DatabaseService {
 
   private saveDatabase(data: DatabaseSchema = this.schema) {
     try {
+      const jsonStr = JSON.stringify(data, null, 2);
       const tempPath = `${DB_FILE}.tmp`;
-      fs.writeFileSync(tempPath, JSON.stringify(data, null, 2), 'utf-8');
+      fs.writeFileSync(tempPath, jsonStr, 'utf-8');
       fs.renameSync(tempPath, DB_FILE);
+
+      // Keep a redundant safety copy so an accidental file overwrite or crash never loses data
+      try {
+        fs.writeFileSync(`${DB_FILE}.bak`, jsonStr, 'utf-8');
+      } catch {
+        // non-blocking
+      }
     } catch (e) {
       console.error('Failed to write database file:', e);
     }
@@ -495,10 +597,18 @@ class DatabaseService {
 
     // 2. Ensure admin account exists with role: 'admin' and active status
     const adminUser = this.schema.users.find(u => u.username.toLowerCase() === envUser.toLowerCase());
+    const shouldForceReset = process.env.RESET_ADMIN_PASSWORD === 'true';
+
     if (adminUser) {
       adminUser.role = 'admin';
       adminUser.isActive = true;
-      adminUser.passwordHash = bcrypt.hashSync(envPass, salt);
+      // Preserve existing password saved in database.json unless user has no password or explicit reset is requested
+      if (!adminUser.passwordHash || shouldForceReset) {
+        adminUser.passwordHash = bcrypt.hashSync(envPass, salt);
+        if (shouldForceReset) {
+          console.info(`[Auth] Admin password was reset via RESET_ADMIN_PASSWORD env variable.`);
+        }
+      }
     } else {
       this.schema.users.push({
         id: generateId(),
@@ -976,7 +1086,7 @@ class DatabaseService {
 
     const manifest = {
       id,
-      version: '2.0.0',
+      version: '2.0.1',
       createdAt: timestamp.toISOString(),
       stats
     };
@@ -1159,10 +1269,13 @@ class DatabaseService {
   }
 
   public getPaths() {
+    const isExternal = path.resolve(DATA_DIR) !== path.resolve(process.cwd(), 'data');
     return {
       dataDir: DATA_DIR,
       uploadsDir: UPLOADS_DIR,
-      dbFile: DB_FILE
+      backupsDir: BACKUPS_DIR,
+      dbFile: DB_FILE,
+      isExternalDataDir: isExternal
     };
   }
 }

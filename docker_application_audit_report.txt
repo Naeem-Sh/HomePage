@@ -1,0 +1,746 @@
+================================================================================
+DOCKER APPLICATION READ-ONLY AUDIT REPORT
+Target Platform: Linux (Debian 12 / Ubuntu Server) with Docker & Docker Compose
+Application: Homelab Dashboard & Service Launcher (LinxDash)
+Version: 2.0.1
+Date of Audit: September 19, 2026
+Audit Scope: Static Source Code, Docker Configuration, Persistence, Security
+Audit Mode: READ-ONLY Analysis (No Code, DB, or Config Modifications)
+================================================================================
+
+
+1. EXECUTIVE SUMMARY
+--------------------------------------------------------------------------------
+This report delivers an exhaustive, read-only architectural, persistence, and
+containerization audit for deploying the Homelab Dashboard & Service Launcher
+application inside a Docker container on Linux (Debian).
+
+Key Findings Summary:
+- Architecture: Modern client-server web application featuring a React 19 Single
+  Page Application (SPA) frontend and a Node.js 22 Express backend bundled via
+  esbuild into a single CommonJS server distribution (dist/server.cjs).
+- Database & Persistence: Uses a flat-file JSON document store with atomic
+  writes and automated fallback backup (.bak). All application state, uploaded
+  logos/documents, and archives reside under a single directory tree
+  (/app/data), making persistent storage and backups straightforward.
+- Offline Capability: 100% functional in isolated/air-gapped environments. No
+  external runtime APIs, no cloud authentication, and no outbound network
+  requests are made by the backend.
+- Critical Security/State Risk: The server startup sequence in server/db.ts
+  automatically re-hashes and overwrites the admin account password with the
+  INITIAL_ADMIN_PASSWORD environment variable (default: "123") on every container
+  restart, resetting any password changes made through the web UI unless the
+  environment variable is explicitly configured in .env.
+- Docker State Safety: The container correctly runs as non-root (user: node,
+  UID/GID 1000). Named volumes survive standard container restarts and updates;
+  however, executing "docker compose down -v" destroys named volumes. Using a
+  host directory bind mount (e.g., /opt/homelab-data:/app/data) with proper UID
+  permissions guarantees survival across all Docker teardown operations.
+
+
+2. APPLICATION ARCHITECTURE
+--------------------------------------------------------------------------------
+Frontend Technology & Architecture:
+- Framework: React 19.0.1 with TypeScript 5.8.2.
+- Build Tool: Vite 6.2.3 using @vitejs/plugin-react and @tailwindcss/vite.
+- Styling: Tailwind CSS v4 with custom Apple-inspired frosted glassmorphism
+  utility tokens defined in src/index.css.
+- UI Animation: Motion (motion/react v12.23.24) and canvas-confetti.
+- Icons: lucide-react (v0.546.0) combined with a local, offline vector catalog of
+  58 pre-compiled SVG homelab and Linux service icons (src/data/builtinIcons.ts).
+- Typography: Local @fontsource/vazirmatn (v5.3.0) bundled into static assets,
+  supplemented by Google Fonts link tags in index.html.
+- State Management: React functional component hooks (useState, useEffect,
+  useMemo, useCallback) synchronized with browser Web Storage and backend REST
+  endpoints.
+
+Backend / Server Technology & Architecture:
+- Runtime: Node.js 22 (Alpine-based Linux in container).
+- Framework: Express 4.21.2.
+- Packaging / Bundling: esbuild 0.25.0 bundles server.ts and route modules into a
+  single file (dist/server.cjs) with external package resolution.
+- File Handling: Multer 2.2.0 for multipart file uploads with strict extension
+  and MIME validation; adm-zip 0.6.1 for creating and extracting full ZIP
+  system backups.
+- Authentication: jsonwebtoken 9.0.3 for HMAC SHA256 JWT tokens and bcryptjs
+  3.0.3 for salted password hashing.
+
+API Structure & Communication:
+- Communication between frontend and backend is conducted over a JSON REST API
+  mounted at /api/*.
+- Endpoints are partitioned into public configuration routes (/api/public/*),
+  authentication routes (/api/auth/*), and admin-protected routes (/api/admin/*).
+- Static uploaded files are served from /uploads/* with HTTP cache headers
+  (max-age 86400, stale-while-revalidate 604800) and inline disposition.
+- Unhandled /api/* routes are terminated with 404 JSON to prevent accidental SPA
+  HTML fallback.
+
+Runtime Entry Points:
+- Development Entry Point: "npm run dev" -> "tsx server.ts" (Express with Vite
+  middleware mode).
+- Production Entry Point: "npm start" -> "node dist/server.cjs" (Serving compiled
+  static files in dist/ and handling /api routes).
+
+Build Process:
+1. "vite build": Compiles React JSX/TSX into minified, hash-named bundles in
+   dist/assets/ and copies static files to dist/.
+2. "esbuild server.ts --bundle --platform=node --format=cjs --packages=external
+   --sourcemap --outfile=dist/server.cjs": Compiles TypeScript backend files into
+   a standalone CommonJS bundle.
+
+Production Startup Process:
+1. Docker container boots with "node dist/server.cjs" as user "node" (UID 1000).
+2. Environment variables are loaded via dotenv/config and system process.env.
+3. DatabaseService resolves DATA_DIR (from DATA_DIR env, .datadir, or ./data).
+4. Auto-migration check: If an external DATA_DIR is newly configured and empty,
+   it copies existing database and uploads from the local project data directory.
+5. Loads and validates database.json; falls back to database.json.bak if corrupted.
+6. Synchronizes default admin credentials via ensureDefaultUsers().
+7. Express binds to 0.0.0.0:3000.
+8. Registers OS process signal listeners (SIGTERM, SIGINT) for graceful shutdown.
+
+
+3. CLIENT-SIDE VS SERVER-SIDE PERCENTAGE
+--------------------------------------------------------------------------------
+Estimation based on code complexity, volume, and operational logic:
+
+Client-side: 55%
+- Contains the comprehensive user interface, visual layout customizers, dark/light
+  theme engines, interactive service filters, drag-and-drop ordering, modal
+  dialogs, Excel spreadsheet generator (xlsx), SVG icon catalog, and client-side
+  telemetry caching.
+
+Server-side: 45%
+- Contains the REST API routing, rate limiting, JWT token issuance and
+  verification, bcrypt password hashing, atomic JSON file database persistence,
+  auto-migration logic, backup archive packaging/restoration, SVG sanitation,
+  and static file delivery.
+
+
+4. DATA STORAGE
+--------------------------------------------------------------------------------
+Detailed inventory of all application storage mechanisms:
+
+1. System Configuration, Entities & Metadata:
+   - Storage Location: ${DATA_DIR}/database.json (Default: /app/data/database.json)
+   - Stored Content: Users, categories, applications, portal settings, audit logs.
+   - Realm: Server filesystem.
+   - Durability: Persistent. Critical for backup.
+
+2. Safety Database Mirror:
+   - Storage Location: ${DATA_DIR}/database.json.bak
+   - Stored Content: Last known valid database snapshot.
+   - Realm: Server filesystem.
+   - Durability: Persistent. Recommended for backup.
+
+3. Analytics & Telemetry:
+   - Storage Location: ${DATA_DIR}/visits.json
+   - Stored Content: Aggregated daily visit counters.
+   - Realm: Server filesystem.
+   - Durability: Persistent. Non-critical.
+
+4. User Uploaded Files & Media:
+   - Storage Location: ${DATA_DIR}/uploads/ (Default: /app/data/uploads/)
+   - Stored Content: Custom uploaded application logos, background wallpapers,
+     and attached service documentation files (PDF, images).
+   - Realm: Server filesystem.
+   - Durability: Persistent. Critical for backup.
+
+5. Backup Archives:
+   - Storage Location: ${DATA_DIR}/backups/ (Default: /app/data/backups/)
+   - Stored Content: Generated ZIP backup files.
+   - Realm: Server filesystem.
+   - Durability: Persistent.
+
+6. Temporary Atomic Writes:
+   - Storage Location: ${DATA_DIR}/database.json.tmp
+   - Stored Content: In-flight JSON serialization before atomic rename.
+   - Realm: Server filesystem.
+   - Durability: Transient (exists for milliseconds during file write).
+
+7. User Web Storage (Browser localStorage):
+   - "linxdash_token": JWT token string for authenticated administrator session.
+   - "linxdash_theme": 'dark' | 'light' | 'system' UI theme preference.
+   - "linxdash_layout_view": 'grid' | 'list' view mode preference.
+   - "linxdash_favorite_apps": JSON array of pinned service IDs.
+   - "linxdash_custom_order": JSON array of drag-and-drop sorted service IDs.
+   - "linxdash_bg_theme": Selected background wallpaper preset ID.
+   - "homelab_admin_bg_style": Selected administrative background motif.
+   - "linxdash_telemetry_visits": Cached visitor stats.
+   - "linxdash_app_clicks": Counter of application launches.
+   - Realm: Client browser.
+   - Durability: Persistent across browser sessions.
+
+8. User Web Storage (Browser sessionStorage):
+   - "linxdash_session_id": UUID string identifying current browser tab session.
+   - "linxdash_session_tracked": Boolean flag preventing multiple counter hits.
+   - Realm: Client browser.
+   - Durability: Transient (destroyed when browser tab is closed).
+
+9. In-Memory Data (Server RAM):
+   - Active client sessions map (Map<clientId, { lastSeen: number }>).
+   - Login attempts rate limiting map (Map<ip, { count: number, firstAttempt }>).
+   - Realm: Server memory.
+   - Durability: Ephemeral (cleared on server restart).
+
+10. Databases NOT Present:
+    - SQLite: None.
+    - PostgreSQL: None.
+    - MySQL / MariaDB: None.
+    - Cookies: None.
+    - IndexedDB: None.
+    - Service Worker Cache: None.
+
+
+5. DATA PERSISTENCE
+--------------------------------------------------------------------------------
+Persistence Strategy Assessment:
+- All dynamic data strictly resides under a single parent directory defined by
+  the environment variable DATA_DIR (defaulting to /app/data inside the container).
+- The application implements an atomic file writing pattern:
+    1. Write JSON to database.json.tmp
+    2. Sync and rename database.json.tmp to database.json
+    3. Replicate copy to database.json.bak
+  This ensures that sudden container termination, power outages, or host reboots
+  never leave database.json in a truncated or corrupted half-written state.
+- Critical Data for Backup:
+  1. database.json
+  2. uploads/ directory
+  3. .env configuration (containing JWT_SECRET)
+
+
+6. DATABASE ANALYSIS
+--------------------------------------------------------------------------------
+Database Technology:
+- Flat-file JSON Document Database managed by DatabaseService (server/db.ts).
+
+Database Files:
+- Primary file: /app/data/database.json
+- Redundant mirror: /app/data/database.json.bak
+- Visits file: /app/data/visits.json
+
+Schema Definition:
+- users: Array of User objects (id, username, passwordHash, role, isActive,
+  createdAt).
+- categories: Array of Category objects (id, name, icon, sortOrder, description).
+- applications: Array of Application objects (id, name, url, internalUrl, icon,
+  categoryId, tags, isPinned, description, dashboards, createdAt, updatedAt).
+- settings: Object containing portal configuration (portalName, welcomeTitle,
+  welcomeSubtitle, defaultTheme, autoRefreshInterval, openInNewTab, showClock,
+  footerNote, allowRegistration, customCss).
+- auditLogs: Array of AuditLog objects (id, timestamp, action, username, ip,
+  details).
+
+Migration & Initialization Mechanism:
+- If database.json does not exist:
+  1. If DATA_DIR is an external path and local ./data/database.json exists, it
+     automatically copies the existing local database and uploads directory.
+  2. Otherwise, initializes with rich default homelab categories, sample
+     services, default portal settings, and creates an initial admin user.
+- Schema auto-repair: Missing schema fields in existing JSON files are populated
+  with default values upon reading.
+- Container Re-creation Loss Assessment:
+  - If /app/data is mounted to a Docker Volume or Bind Mount: NO data loss occurs.
+  - If /app/data is NOT mounted: DATA WILL BE LOST when the container is deleted.
+
+
+7. DOCKER STORAGE
+--------------------------------------------------------------------------------
+Container Paths:
+- /app: Working directory containing application code.
+- /app/dist: Static frontend build and bundled server (Read-only at runtime).
+- /app/data: Persistent storage mount point for database, uploads, and backups.
+- /app/data/uploads: Subdirectory storing uploaded files.
+- /app/data/backups: Subdirectory storing generated ZIP backup files.
+
+Volume Declarations:
+- Dockerfile line 43 declares: VOLUME ["/app/data"]
+  This marks /app/data as a volume mount point. If a user runs the container
+  without specifying a mount, Docker creates an anonymous volume.
+
+Docker Compose Volume Configuration (docker-compose.yml):
+- Configured with named volume:
+    volumes:
+      - homelab_data:/app/data
+    volumes:
+      homelab_data:
+        driver: local
+- Alternative host bind mount documented in compose file:
+    volumes:
+      - ./data:/app/data
+
+Comparison of Docker Storage Options for this Application:
+1. Container Filesystem (No Mount):
+   - Storage location: Container writable layer (/var/lib/docker/overlay2/...).
+   - Container restart: Data survives.
+   - Container recreation (docker compose up -d): Data is LOST.
+   - Container deletion (docker rm): Data is LOST.
+   - Assessment: UNSUITABLE FOR PRODUCTION.
+
+2. Docker Named Volume (homelab_data:/app/data):
+   - Storage location: /var/lib/docker/volumes/homelab_data/_data on host.
+   - Container restart: Data survives.
+   - Container recreation: Data survives.
+   - Container deletion: Data survives.
+   - Image upgrade / rebuild: Data survives.
+   - Host reboot: Data survives.
+   - "docker compose down -v": Data is DESTROYED (the -v flag removes volumes).
+   - Assessment: ACCEPTABLE, but requires caution with the "-v" flag.
+
+3. Host Bind Mount (/opt/homelab-data:/app/data or ./data:/app/data):
+   - Storage location: Dedicated directory on host filesystem.
+   - Container restart: Data survives.
+   - Container recreation: Data survives.
+   - Container deletion: Data survives.
+   - Image upgrade / rebuild: Data survives.
+   - Host reboot: Data survives.
+   - "docker compose down -v": Data SURVIVES (bind mounts are never removed by -v).
+   - Host migration: Easily copied via tar or rsync.
+   - Assessment: RECOMMENDED FOR PRODUCTION.
+
+
+8. DOCKER IMAGE ANALYSIS
+--------------------------------------------------------------------------------
+Base Image:
+- node:22-alpine (Official Node.js Docker Image based on Alpine Linux).
+- Operating System: Alpine Linux v3.20/v3.21.
+- Package Manager: apk (Alpine Package Keeper) and npm.
+
+Multi-Stage Build Analysis:
+- Stage 1 ("builder"):
+  - Base: node:22-alpine
+  - Action: Installs all dependencies (npm ci), compiles frontend (vite build),
+    and bundles server (esbuild).
+- Stage 2 ("runner"):
+  - Base: node:22-alpine
+  - Action: Installs production dependencies only (npm ci --omit=dev), cleans npm
+    cache, copies /app/dist from builder, creates /app/data directory, sets
+    permissions for user "node", and switches to user "node".
+
+Runtime Specifications:
+- Working Directory: /app
+- Exposed Ports: 3000
+- Execution User: node (UID: 1000, GID: 1000) - Non-root execution.
+- Entrypoint / Command: CMD ["npm", "start"]
+- Healthcheck:
+  - Command: wget --no-verbose --tries=1 --spider http://localhost:3000/api/public/config || exit 1
+  - Interval: 30s
+  - Timeout: 5s
+  - Start Period: 10s
+  - Retries: 3
+
+Internet Downloads During Lifecycle:
+- Image Build Time: Downloads Node Alpine base image and npm packages from registry.
+- Container Startup Time: NONE. Zero network requests or package installations
+  occur during container boot.
+
+
+9. DEPENDENCIES
+--------------------------------------------------------------------------------
+Package Manifests:
+- package.json defines 17 runtime dependencies and 7 devDependencies.
+- package-lock.json (Lockfile Version 3) provides cryptographic SHA-512 hashes
+  and strictly pinned resolution for all transitive packages.
+
+Dependency Audit:
+- Production Dependencies (package.json):
+    @fontsource/vazirmatn: ^5.3.0 (Bundled into frontend dist assets)
+    @google/genai: ^2.4.0 (Unused dependency, present in manifest)
+    @tailwindcss/vite: ^4.1.14 (Build plugin)
+    @types/adm-zip, @types/bcryptjs, @types/canvas-confetti, @types/jsonwebtoken,
+    @types/multer, @vitejs/plugin-react: Build/type definitions
+    adm-zip: ^0.6.1 (Runtime: ZIP backup archives)
+    bcryptjs: ^3.0.3 (Runtime: Password hashing)
+    canvas-confetti: ^1.9.4 (Frontend: UI celebration effects)
+    dotenv: ^17.2.3 (Runtime: Environment variables)
+    express: ^4.21.2 (Runtime: HTTP Web server)
+    jsonwebtoken: ^9.0.3 (Runtime: JWT authentication)
+    lucide-react: ^0.546.0 (Frontend: Vector icons)
+    motion: ^12.23.24 (Frontend: UI animations)
+    multer: ^2.2.0 (Runtime: File uploads)
+    react, react-dom: ^19.0.1 (Frontend: UI engine)
+    vite: ^6.2.3 (Frontend build; imported in server.ts for dev mode)
+    xlsx: ^0.18.5 (Frontend: Excel reports)
+
+Rebuild Offline:
+- Rebuilding the Docker image requires an initial internet connection or a local
+  npm proxy / cached image.
+- Once the Docker image is built or imported via "docker load", the application
+  operates completely offline.
+
+Update Risks:
+- All dependencies in package.json utilize caret (^) version ranges. However,
+  because the Dockerfile utilizes "npm ci", builds strictly adhere to the exact
+  versions pinned in package-lock.json, preventing unexpected upstream breakage.
+
+
+10. ENVIRONMENT VARIABLES AND SECRETS
+--------------------------------------------------------------------------------
+Inventory of all Environment Variables:
+
+1. NODE_ENV
+   - Purpose: Configures execution environment ('production' vs 'development').
+   - Status: Optional (Defaults to 'production' in Dockerfile).
+   - Phase: Runtime & Build.
+   - Sensitivity: Non-sensitive.
+   - Default: 'production'
+
+2. PORT
+   - Purpose: Specifies internal HTTP port to bind.
+   - Status: Optional.
+   - Phase: Runtime.
+   - Sensitivity: Non-sensitive.
+   - Default: 3000
+
+3. DATA_DIR
+   - Purpose: Specifies absolute path for persistent database and media files.
+   - Status: Optional (Defaults to /app/data in container).
+   - Phase: Runtime.
+   - Sensitivity: Non-sensitive.
+   - Default: /app/data
+
+4. UPLOADS_DIR
+   - Purpose: Overrides dedicated directory for uploaded assets.
+   - Status: Optional.
+   - Phase: Runtime.
+   - Sensitivity: Non-sensitive.
+   - Default: ${DATA_DIR}/uploads
+
+5. BACKUPS_DIR
+   - Purpose: Overrides dedicated directory for ZIP backups.
+   - Status: Optional.
+   - Phase: Runtime.
+   - Sensitivity: Non-sensitive.
+   - Default: ${DATA_DIR}/backups
+
+6. DB_FILE
+   - Purpose: Overrides JSON database file path.
+   - Status: Optional.
+   - Phase: Runtime.
+   - Sensitivity: Non-sensitive.
+   - Default: ${DATA_DIR}/database.json
+
+7. VISITS_FILE
+   - Purpose: Overrides visitor statistics JSON file path.
+   - Status: Optional.
+   - Phase: Runtime.
+   - Sensitivity: Non-sensitive.
+   - Default: ${DATA_DIR}/visits.json
+
+8. JWT_SECRET
+   - Purpose: Cryptographic signing key for JWT user tokens.
+   - Status: Highly Recommended for Production.
+   - Phase: Runtime.
+   - Sensitivity: SENSITIVE / SECRET.
+   - Fallback Default: 'linxdash-secret-token-key-change-in-production'
+
+9. INITIAL_ADMIN_USER
+   - Purpose: Defines initial administrator username on first run.
+   - Status: Optional.
+   - Phase: Runtime.
+   - Sensitivity: Non-sensitive.
+   - Default: 'admin'
+
+10. INITIAL_ADMIN_PASSWORD
+    - Purpose: Defines administrator password on initial setup.
+    - Status: Highly Recommended for Production.
+    - Phase: Runtime.
+    - Sensitivity: SENSITIVE / SECRET.
+    - Fallback Default: '123'
+
+Client-side Secret Leakage Audit:
+- No environment variables are exposed via "import.meta.env" in frontend source.
+- Neither JWT_SECRET nor INITIAL_ADMIN_PASSWORD are embedded into the client bundle.
+
+
+11. EXTERNAL SERVICES
+--------------------------------------------------------------------------------
+- REST / GraphQL APIs: None. The application has zero outbound API calls.
+- Authentication Providers: None. Completely internal JWT/bcrypt authentication.
+- Cloud Services: None. No telemetry, cloud databases, or remote analytics.
+- CDNs / External Scripts: None. All JavaScript and CSS assets are bundled locally.
+- Remote Fonts: index.html contains links to fonts.googleapis.com and
+  fonts.gstatic.com for Vazirmatn. However, @fontsource/vazirmatn is also bundled
+  locally into dist/assets/. In an air-gapped network, Google Fonts requests will
+  time out harmlessly, and the local font bundle will render.
+- Pre-configured Sample Services: server/db.ts seeds initial mock homelab URLs
+  (e.g., pve.local, docker.local, grafana.local). These are purely initial data
+  records and are not contacted by the server.
+
+
+12. OFFLINE CAPABILITY (AIR-GAPPED ENVIRONMENT)
+--------------------------------------------------------------------------------
+Capability Analysis:
+- Runtime Internet Requirement: 0% (Completely offline).
+- Installation-time Internet Requirement:
+  - If transferring pre-built Docker image tarball: 0% (Completely offline).
+  - If building image on target server: Internet required for npm registry.
+
+Advance Download Requirements for Air-Gapped Deployment:
+1. Docker image saved as tarball:
+   "docker save homelab-dashboard:latest | gzip > homelab-dashboard-latest.tar.gz"
+2. Compose file: docker-compose.yml
+3. Environment file: .env
+
+
+13. CACHE AND PWA
+--------------------------------------------------------------------------------
+- Service Worker: Not implemented.
+- PWA / Web App Manifest: Not implemented.
+- Cache Storage API: Not used.
+- Browser HTTP Caching Strategy:
+  - Hashed bundles (/assets/*.js, /assets/*.css): Served with header
+    "Cache-Control: public, max-age=31536000, immutable". Cached for 1 year.
+  - HTML Entry Point (/index.html): Served with header
+    "Cache-Control: no-cache, must-revalidate".
+  - Result: When a new Docker image with an updated frontend build is deployed,
+    browsers immediately fetch the updated index.html, referencing the new
+    hash-named asset files. Users will NEVER be stuck on a stale cached version.
+- Server-side In-Memory Cache:
+  - Active sessions and login rate limits reside in Node memory and reset on
+    restart.
+
+
+14. BACKUP REQUIREMENTS
+--------------------------------------------------------------------------------
+Complete Backup Inventory:
+
+MINIMUM BACKUP (Restores 100% of portal data and layout):
+- ${DATA_DIR}/database.json
+- ${DATA_DIR}/uploads/
+- .env configuration file
+
+FULL BACKUP (Complete host restoration):
+- docker-compose.yml
+- .env
+- Entire ${DATA_DIR} directory (/opt/homelab-data or docker volume homelab_data)
+- Reverse proxy configuration (e.g., /etc/nginx/sites-available/homelab)
+- SSL certificates (if terminating SSL on host)
+
+DISASTER RECOVERY PROCEDURE:
+Command to create a single-file disaster recovery archive on the Debian host:
+  tar -czvf homelab-backup-$(date +%F).tar.gz docker-compose.yml .env /opt/homelab-data/
+
+
+15. RESTORE REQUIREMENTS
+--------------------------------------------------------------------------------
+Steps to restore application from backup on a clean Debian server:
+1. Extract backup files to target location:
+   tar -xzvf homelab-backup-YYYY-MM-DD.tar.gz -C /
+2. Verify host directory permissions match container UID (1000):
+   chown -R 1000:1000 /opt/homelab-data
+   chmod -R 775 /opt/homelab-data
+3. Start container via Docker Compose:
+   docker compose up -d
+4. Verification:
+   curl -I http://localhost:3000/api/public/config
+
+
+16. MIGRATION REQUIREMENTS
+--------------------------------------------------------------------------------
+Requirements to migrate application between Debian servers:
+- Source Server:
+  1. Stop container: docker compose stop
+  2. Create archive of data folder, compose file, and .env.
+- Target Server:
+  1. Install Docker Engine and Docker Compose plugin.
+  2. Copy archive and extract.
+  3. Load Docker image ("docker load < image.tar.gz") or pull from registry.
+  4. Ensure directory ownership: "chown -R 1000:1000 /opt/homelab-data".
+  5. Start container: "docker compose up -d".
+- Migration Difficulty: Very Low (Under 5 minutes; zero external database
+  dependencies).
+
+
+17. UPDATE AND DATA-LOSS RISKS
+--------------------------------------------------------------------------------
+Scenario Analysis:
+
+1. "docker compose pull" -> NO RISK.
+   Only downloads new image layers. Running containers and data are untouched.
+
+2. "docker compose up -d" -> NO RISK (with proper mounts).
+   Gracefully stops old container, attaches existing volume/bind mount to the
+   new container, and starts execution.
+
+3. "docker compose down" -> NO RISK.
+   Stops and removes containers and network. Persistent volumes are untouched.
+
+4. "docker compose down -v" -> CRITICAL DATA LOSS RISK (with Named Volumes).
+   The "-v" flag explicitly instructs Docker to delete all named volumes declared
+   in the compose file. If homelab_data is a named volume, ALL DATABASE ENTRIES,
+   UPLOADED LOGOS, AND BACKUPS WILL BE PERMANENTLY ERASED.
+   Mitigation: Use a Host Bind Mount (e.g., /opt/homelab-data:/app/data).
+
+5. Password Reset on Restart -> IMPORTANT OPERATIONAL RISK.
+   In server/db.ts (lines 599-603), ensureDefaultUsers() runs on every boot:
+   If an administrator changes their password via the UI, and the container
+   restarts, the code resets the password back to INITIAL_ADMIN_PASSWORD.
+   Mitigation: Define INITIAL_ADMIN_PASSWORD in .env to match the intended
+   permanent password.
+
+
+18. DOCKER SECURITY
+--------------------------------------------------------------------------------
+- User Privilege: NON-ROOT (USER node, UID 1000, GID 1000). Passed.
+- Capabilities: Operates with default unprivileged container capabilities.
+  Does NOT require --privileged or host namespace access. Passed.
+- Filesystem Access:
+  - Container root filesystem is isolated.
+  - Only /app/data requires write permissions.
+- Network Access:
+  - Binds only to port 3000.
+  - Requires no outbound internet connectivity at runtime.
+- Input Sanitation & File Upload Security:
+  - Multer restricts upload file size (10MB limit).
+  - SVG uploads are sanitized with a regex scanner that strips <script>,
+    javascript:, and malicious event handlers (onload, onerror, etc.).
+  - File extension blacklist rejects executable and script extensions (.html,
+    .js, .php, .sh, .py, .exe, etc.).
+- Brute Force Protection:
+  - Express in-memory rate limiter blocks login requests exceeding 30 attempts
+    per minute per client IP.
+- Recommended Production Hardening:
+  - Set a strong, random JWT_SECRET in .env.
+  - Deploy an Nginx or Caddy reverse proxy on the host to terminate HTTPS.
+
+
+19. ARCHITECTURE DIAGRAM
+--------------------------------------------------------------------------------
+                               +-----------------------------+
+                               |     Local Network / LAN     |
+                               |        Client Browser       |
+                               +--------------+--------------+
+                                              |
+                                              | HTTP / HTTPS (Port 3000 or 443)
+                                              v
+                               +-----------------------------+
+                               |    Debian Host Firewall     |
+                               |    (UFW / Reverse Proxy)    |
+                               +--------------+--------------+
+                                              |
+                                              | Internal Forward (Port 3000)
+                                              v
++------------------------------------------------------------------------------+
+| Docker Container: homelab-dashboard (node:22-alpine)                         |
+| User: node (UID 1000, GID 1000)                                             |
+|                                                                              |
+|  +-------------------------------------+  +--------------------------------+ |
+|  | Express HTTP Server                 |  | Vite SPA Frontend Static Files | |
+|  | (dist/server.cjs)                   |  | (dist/assets/ *.js, *.css)     | |
+|  +------------------+------------------+  +----------------+---------------+ |
+|                     |                                      |                 |
+|       +-------------+-------------+                        |                 |
+|       |                           |                        |                 |
+|       v                           v                        |                 |
+|  /api/* (REST API)        /uploads/* (Static)              |                 |
+|  - JWT Authentication     - Inline File Serving            |                 |
+|  - Rate Limiting          - Cache Headers                  |                 |
+|       |                           |                        |                 |
+|       v                           |                        |                 |
+|  DatabaseService                  |                        |                 |
+|  - Atomic Write Engine            |                        |                 |
+|  - Auto .bak Snapshot             |                        |                 |
+|       |                           |                        |                 |
+|       +-------------+-------------+                        |                 |
+|                     |                                      |                 |
+|                     v                                      |                 |
+|  Container Mount: /app/data <------------------------------+                 |
+|  ├── database.json & database.json.bak                                       |
+|  ├── visits.json                                                             |
+|  ├── uploads/ (Logos, Custom Icons, Wallpapers, PDF Documents)               |
+|  └── backups/ (System ZIP archives)                                          |
++---------------------+--------------------------------------------------------+
+                      |
+                      | Persistent Storage Mount
+                      v
++------------------------------------------------------------------------------+
+| Debian Host System Storage                                                   |
+|                                                                              |
+| Option A (Recommended): Host Bind Mount                                      |
+| /opt/homelab-data (Host directory owned by UID 1000)                         |
+|                                                                              |
+| Option B: Docker Named Volume                                                |
+| /var/lib/docker/volumes/homelab_data/_data                                   |
+|                                                                              |
+| Host Configuration:                                                          |
+| ├── docker-compose.yml                                                       |
+| └── .env (JWT_SECRET, INITIAL_ADMIN_PASSWORD, DATA_DIR)                      |
++------------------------------------------------------------------------------+
+
+
+20. FINAL DOCKER DEPLOYMENT REPORT SUMMARY
+--------------------------------------------------------------------------------
+Application Type: Full-Stack Web Application (React SPA + Express Node Backend)
+Client-side Percentage: 55%
+Server-side Percentage: 45%
+Database Type: File-based JSON Document Store (Atomic writes with .bak mirror)
+Data Storage Location: ${DATA_DIR} (/app/data)
+Persistent Storage: Required for /app/data
+Docker Volumes: Supported (homelab_data:/app/data)
+Bind Mounts: Supported & Recommended (/opt/homelab-data:/app/data)
+Important Files: database.json, uploads/, docker-compose.yml, .env
+Required Environment Variables: JWT_SECRET (Recommended), INITIAL_ADMIN_PASSWORD
+External Dependencies: None at runtime
+Internet Requirement: 0% at runtime (100% Offline / Air-Gapped capable)
+Cache & PWA: Standard HTTP Cache-Control; no PWA / Service Worker
+Docker Image: node:22-alpine multi-stage (Non-root user node, UID 1000)
+Backup Requirements: Backup /app/data folder and .env file
+Restore Requirements: Restore /app/data, chown to UID 1000, docker compose up -d
+Migration Difficulty: Very Low (< 5 minutes)
+Update Risks: Low with Bind Mounts; Data loss risk with "docker compose down -v"
+              when using named volumes; Admin password reset risk on restart.
+Security Risks: Low (Non-root container, rate-limited login, SVG sanitation).
+
+
+21. CLASSIFIED FINDINGS
+--------------------------------------------------------------------------------
+
+CRITICAL FINDINGS:
+1. [CONFIRMED] Password Reset on Container Restart:
+   In server/db.ts (lines 599-603), ensureDefaultUsers() runs whenever the server
+   starts. It matches the admin username and overwrites the passwordHash with
+   INITIAL_ADMIN_PASSWORD (default: "123"). If an admin changes their password
+   via the Web UI, any subsequent container restart will silently reset their
+   password back to INITIAL_ADMIN_PASSWORD.
+   Remediation: Set INITIAL_ADMIN_PASSWORD in .env to the desired permanent
+   password.
+
+2. [CONFIRMED] Data Loss Risk with "docker compose down -v":
+   The default docker-compose.yml defines a named volume "homelab_data". If an
+   administrator tears down the environment using "docker compose down -v",
+   Docker permanently deletes the named volume and all database/upload data.
+   Remediation: Use a host bind mount (e.g., /opt/homelab-data:/app/data).
+
+IMPORTANT FINDINGS:
+1. [CONFIRMED] Host Directory Permissions on Debian (UID 1000):
+   The container drops root privileges and executes under user "node" (UID 1000,
+   GID 1000). When using a host bind mount (/opt/homelab-data), if the directory
+   is created by root with default 755 permissions, the container will encounter
+   EACCES errors and fail to save database.json or uploads.
+   Remediation: Execute "sudo chown -R 1000:1000 /opt/homelab-data" on the host.
+
+2. [CONFIRMED] Unused Dependency in package.json:
+   The package "@google/genai" is declared in package.json dependencies, but is
+   not imported or utilized anywhere in the codebase. Removing it avoids
+   unnecessary download time during image compilation.
+
+3. [CONFIRMED] External Font Tags in index.html:
+   index.html includes external link tags for Google Fonts (fonts.googleapis.com).
+   While @fontsource/vazirmatn is bundled locally, in an isolated air-gapped
+   network, client browsers will trigger harmless network timeout warnings for
+   Google Fonts. Removing the link tags ensures completely clean offline loading.
+
+OPTIONAL IMPROVEMENTS:
+1. [LIKELY] Replace "CMD ["npm", "start"]" with "CMD ["node", "dist/server.cjs"]":
+   Running Node directly as PID 1 (or with Docker "--init") enables cleaner OS
+   process signal handling and instant response to SIGTERM shutdown signals.
+
+2. [CONFIRMED] Frontend Dependency Pruning from Runner Stage:
+   Packages like "xlsx", "canvas-confetti", and "motion" are bundled into the
+   frontend assets during build. They are not needed by Node at runtime and can
+   be moved to devDependencies to minimize image size.
+
+================================================================================
+END OF AUDIT REPORT
+================================================================================

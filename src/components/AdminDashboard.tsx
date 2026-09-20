@@ -1509,9 +1509,20 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       </p>
                     </div>
                     <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200/60 dark:border-slate-800/60 sm:col-span-2">
-                      <span className="text-slate-400">مسیر ذخیره‌سازی داده‌ها</span>
-                      <p className="font-mono font-bold text-slate-800 dark:text-slate-200 mt-1 truncate">
-                        ./data/database.json
+                      <div className="flex items-center justify-between gap-2 mb-1">
+                        <span className="text-slate-400">مسیر ذخیره‌سازی داده‌ها</span>
+                        {systemInfo?.isExternalDataDir ? (
+                          <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-950/70 dark:text-emerald-300 font-bold border border-emerald-300 dark:border-emerald-800 flex items-center gap-1">
+                            ✓ خارج از پوشه پروژه (ایمن در آپدیت)
+                          </span>
+                        ) : (
+                          <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-200 text-slate-700 dark:bg-slate-800 dark:text-slate-300 font-medium">
+                            پوشه داخلی پروژه (./data)
+                          </span>
+                        )}
+                      </div>
+                      <p className="font-mono text-xs font-bold text-slate-800 dark:text-slate-200 truncate" dir="ltr">
+                        {systemInfo?.dataDir || systemInfo?.dbFile || './data/database.json'}
                       </p>
                     </div>
                   </div>
@@ -3480,6 +3491,69 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     <Trash2 className="w-4 h-4" />
                     <span>پاک‌سازی داده‌ها و ریست دیتابیس</span>
                   </button>
+                </div>
+              </div>
+
+              {/* Persistent Storage & Update Safety Guide */}
+              <div className="p-5 rounded-2xl bg-white/80 dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800 shadow-xs space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-9 h-9 rounded-xl bg-blue-500/10 dark:bg-blue-500/20 text-blue-600 dark:text-blue-400 flex items-center justify-center shrink-0">
+                      <HardDrive className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+                    </div>
+                    <div>
+                      <h3 className="font-bold text-sm text-slate-900 dark:text-slate-100 flex items-center gap-2">
+                        <span>پیکربندی مسیر ذخیره‌سازی دائمی داده‌ها (Persistent Storage)</span>
+                        {systemInfo?.isExternalDataDir ? (
+                          <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-950/70 dark:text-emerald-300 font-bold border border-emerald-300 dark:border-emerald-800">
+                            ✓ ایمن در برابر آپدیت
+                          </span>
+                        ) : (
+                          <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 dark:bg-amber-950/70 dark:text-amber-300 font-bold border border-amber-300 dark:border-amber-800">
+                            پوشه پیش‌فرض داخلی
+                          </span>
+                        )}
+                      </h3>
+                      <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                        با ذخیره داده‌ها در مسیری خارج از برنامه (مانند <code className="font-mono text-blue-600 dark:text-blue-400">/opt/homelab-data</code>)، با حذف، جایگزینی یا به‌روزرسانی کدهای پروژه، هیچ اطلاعاتی پاک نمی‌شود.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-950/80 border border-slate-200 dark:border-slate-800 space-y-2 text-xs">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                    <span className="font-semibold text-slate-700 dark:text-slate-300">مسیر فعال فعلی:</span>
+                    <span className="font-mono text-xs text-slate-900 dark:text-slate-100 font-bold px-2 py-1 rounded bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800" dir="ltr">
+                      {systemInfo?.dataDir || './data'}
+                    </span>
+                  </div>
+
+                  <div className="text-slate-600 dark:text-slate-400 text-[11px] leading-relaxed pt-1">
+                    {systemInfo?.isExternalDataDir ? (
+                      <span className="text-emerald-600 dark:text-emerald-400 font-medium">
+                        ✓ عالی! داده‌های شما در مسیری مجزا و پایدار ذخیره شده‌اند. می‌توانید با خیال راحت برنامه‌ها یا فایل‌های پروژه را آپدیت کنید.
+                      </span>
+                    ) : (
+                      <span>
+                        💡 در حال حاضر داده‌ها داخل پوشه خود برنامه ذخیره می‌شوند. برای فعال‌سازی ذخیره‌سازی دائمی، دستورات زیر را روی سرور اجرا کنید:
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                <div className="space-y-2 text-xs">
+                  <span className="font-bold text-slate-700 dark:text-slate-300">دستور فعال‌سازی پوشه مستقل در لینوکس (انتقال خودکار انجام می‌شود):</span>
+                  <pre className="p-3 rounded-xl bg-slate-900 text-slate-100 font-mono text-[11px] overflow-x-auto select-all dir-ltr text-left leading-relaxed">
+{`# 1. ایجاد پوشه با دسترسی لازم
+sudo mkdir -p /opt/homelab-data && sudo chmod 777 /opt/homelab-data
+
+# 2. تنظیم متغیر در فایل .env یا فایل .datadir
+echo "DATA_DIR=/opt/homelab-data" >> .env
+# یا: echo "/opt/homelab-data" > .datadir
+
+# 3. راه‌اندازی مجدد برنامه (اطلاعات قبلی خودکار به مسیر جدید منتقل می‌شود)`}
+                  </pre>
                 </div>
               </div>
 

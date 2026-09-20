@@ -101,7 +101,7 @@ router.get('/health', (_req: Request, res: Response) => {
   const mem = process.memoryUsage();
   res.json({
     status: 'healthy',
-    version: '2.0.0',
+    version: '2.0.1',
     timestamp: new Date().toISOString(),
     uptimeSeconds: Math.floor(process.uptime()),
     nodeVersion: process.version,
@@ -382,7 +382,10 @@ router.get('/admin/overview', requireStaffOrAdmin, (_req: AuthenticatedRequest, 
       memUsedPercent,
       storageTotalGB: 128,
       storageUsedGB: 42,
-      storageUsedPercent: 33
+      storageUsedPercent: 33,
+      dataDir: db.getPaths().dataDir,
+      dbFile: db.getPaths().dbFile,
+      isExternalDataDir: db.getPaths().isExternalDataDir
     },
     activity: db.getActivityStats(),
     settings,

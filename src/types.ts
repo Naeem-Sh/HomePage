@@ -1,4 +1,4 @@
-export const APP_VERSION = '2.0.0';
+export const APP_VERSION = '2.0.1';
 
 export type UserRole = 'admin';
 export type DashboardTarget = 'public' | 'admin';
@@ -137,6 +137,9 @@ export interface SystemInfo {
   storageTotalGB?: number;
   storageUsedGB?: number;
   storageUsedPercent?: number;
+  dataDir?: string;
+  dbFile?: string;
+  isExternalDataDir?: boolean;
 }
 
 export interface AuditLog {

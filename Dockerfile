@@ -50,8 +50,9 @@ EXPOSE 3000
 
 # Container Healthcheck
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-  CMD wget --no-verbose --tries=1 --spider http://localhost:3000/api/public/config || exit 1
+  CMD wget --no-verbose --tries=1 --spider http://localhost:3000/api/health || exit 1
 
-# Start the application
-CMD ["npm", "start"]
+# Start the application directly with Node for proper SIGTERM/SIGINT signal handling
+CMD ["node", "dist/server.cjs"]
+
 
