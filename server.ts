@@ -36,6 +36,32 @@ async function startServer() {
     }
   }));
 
+  // Serve browser tab favicon matching user's custom portal logo
+  app.get(['/favicon.ico', '/favicon.png'], (_req, res) => {
+    try {
+      const settings = db.getSettings();
+      if (settings?.logoUrl) {
+        if (settings.logoUrl.startsWith('/uploads/')) {
+          const relPath = settings.logoUrl.replace(/^\/uploads\//, '');
+          const filePath = path.join(paths.uploadsDir, relPath);
+          if (fs.existsSync(filePath)) {
+            res.setHeader('Cache-Control', 'no-cache');
+            return res.sendFile(filePath);
+          }
+        } else if (settings.logoUrl.startsWith('http://') || settings.logoUrl.startsWith('https://')) {
+          return res.redirect(settings.logoUrl);
+        }
+      }
+    } catch {
+      // Fallback to default SVG
+    }
+
+    const defaultSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="8" x="2" y="2" rx="2" ry="2"/><rect width="20" height="8" x="2" y="14" rx="2" ry="2"/><line x1="6" x2="6.01" y1="6" y2="6"/><line x1="6" x2="6.01" y1="18" y2="18"/></svg>`;
+    res.setHeader('Content-Type', 'image/svg+xml');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.send(defaultSvg);
+  });
+
   // Mount API router FIRST
   app.use('/api', routes);
 

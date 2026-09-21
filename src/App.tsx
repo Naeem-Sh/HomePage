@@ -7,6 +7,7 @@ import { SetupWizard } from './components/SetupWizard';
 import { AuthModal } from './components/AuthModal';
 import { DashboardSwitcher } from './components/DashboardSwitcher';
 import { ThemeToggle } from './components/ThemeToggle';
+import { updateFaviconAndTitle } from './lib/favicon';
 import { Server, RefreshCw, Lock, User, KeyRound, LogIn, ArrowLeft, Shield } from 'lucide-react';
 
 export default function App() {
@@ -85,9 +86,19 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    document.title = 'Home';
     loadInitialData();
   }, [loadInitialData]);
+
+  // Synchronize browser tab favicon and title with custom portal logo & title
+  useEffect(() => {
+    if (publicConfig?.settings) {
+      const title = publicConfig.settings.title?.trim() || 'Home';
+      const logoUrl = publicConfig.settings.logoUrl;
+      updateFaviconAndTitle(logoUrl, title);
+    } else {
+      updateFaviconAndTitle(null, 'Home');
+    }
+  }, [publicConfig?.settings?.logoUrl, publicConfig?.settings?.title]);
 
   const handleAuthSuccess = async (auth: AuthResponse) => {
     setStoredToken(auth.token);

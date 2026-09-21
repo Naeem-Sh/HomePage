@@ -385,6 +385,7 @@ router.get('/admin/overview', requireStaffOrAdmin, (_req: AuthenticatedRequest, 
       storageUsedPercent: 33,
       dataDir: db.getPaths().dataDir,
       dbFile: db.getPaths().dbFile,
+      backupsDir: db.getPaths().backupsDir,
       isExternalDataDir: db.getPaths().isExternalDataDir
     },
     activity: db.getActivityStats(),
@@ -1007,7 +1008,12 @@ router.delete('/admin/documents/:filename', requireAdmin, (req: AuthenticatedReq
 
 // --- Backup & Restore (ZIP Packages & JSON Fallback) ---
 router.get('/admin/backups', requireAdmin, (_req: AuthenticatedRequest, res: Response) => {
-  res.json(db.listZipBackups());
+  res.json({
+    backups: db.listZipBackups(),
+    backupsDir: db.getPaths().backupsDir,
+    dataDir: db.getPaths().dataDir,
+    isExternalDataDir: db.getPaths().isExternalDataDir
+  });
 });
 
 router.post('/admin/backups', requireAdmin, (req: AuthenticatedRequest, res: Response) => {

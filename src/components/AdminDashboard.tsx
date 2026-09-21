@@ -40,6 +40,7 @@ import {
   Folder,
   Archive,
   FileArchive,
+  FolderArchive,
   PackageCheck,
   AlertCircle,
   LayoutGrid,
@@ -68,6 +69,7 @@ import {
 } from '../types';
 import { api, setStoredToken } from '../lib/api';
 import { toPersianDigits, formatPersianDate, formatBytes } from '../lib/utils';
+import { updateFaviconAndTitle } from '../lib/favicon';
 import { AppIcon } from './AppIcon';
 import { IconPickerModal } from './IconPickerModal';
 import { ThemeToggle } from './ThemeToggle';
@@ -198,6 +200,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
   // Backup & Activity States
   const [backups, setBackups] = useState<BackupItem[]>([]);
+  const [backupsDir, setBackupsDir] = useState<string>('./data/backups');
   const [isLoadingBackups, setIsLoadingBackups] = useState(false);
   const [isCreatingBackup, setIsCreatingBackup] = useState(false);
   const [isRestoringBackup, setIsRestoringBackup] = useState<string | null>(null);
@@ -385,8 +388,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const loadBackups = async () => {
     setIsLoadingBackups(true);
     try {
-      const list = await api.listBackups();
-      setBackups(list);
+      const res = await api.listBackups();
+      setBackups(res.backups);
+      if (res.backupsDir) {
+        setBackupsDir(res.backupsDir);
+      }
     } catch (err: any) {
       console.error('Failed to load backups:', err);
     } finally {
@@ -398,6 +404,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     loadData();
     loadBackups();
   }, []);
+
+  // Synchronize browser tab favicon and title with custom portal logo & title
+  useEffect(() => {
+    if (settings) {
+      updateFaviconAndTitle(settings.logoUrl, settings.title || 'هوم‌لب لینوکس');
+    }
+  }, [settings?.logoUrl, settings?.title]);
 
   // --- ZIP Backup Handlers ---
   const handleCreateZipBackup = async () => {
@@ -1811,7 +1824,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   <div className="flex items-center gap-3">
                     <span>تعداد دکمه‌های نمایش‌داده‌شده: <strong className="font-mono text-slate-800 dark:text-slate-200">{toPersianDigits(filteredApps.length)}</strong> از <strong className="font-mono text-slate-800 dark:text-slate-200">{toPersianDigits(applications.length)}</strong></span>
                     <span>•</span>
-                    <span>فعال در پرتال: <strong className="font-mono text-emerald-600 dark:text-emerald-400">{toPersianDigits(applications.filter(a => a.isEnabled).length)}</strong></span>
+                    <span>فعال در پورتال: <strong className="font-mono text-emerald-600 dark:text-emerald-400">{toPersianDigits(applications.filter(a => a.isEnabled).length)}</strong></span>
                     <span>•</span>
                     <span>اسناد PDF سرور: <strong className="font-mono text-rose-600 dark:text-rose-400">{toPersianDigits(applications.filter(a => a.fileUrl || a.url.toLowerCase().endsWith('.pdf') || a.url.includes('/uploads/documents/')).length)}</strong></span>
                   </div>
@@ -3221,6 +3234,44 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       <Plus className="w-4 h-4" />
                       <span>{isCreatingBackup ? 'در حال تهیه پشتیبان...' : 'ایجاد نسخه پشتیبان جدید'}</span>
                     </button>
+                  </div>
+                </div>
+
+                {/* Storage Path Indicator */}
+                <div className="p-3.5 rounded-xl bg-purple-50/70 dark:bg-purple-950/20 border border-purple-200/80 dark:border-purple-900/40 text-xs space-y-2.5">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div className="flex items-center gap-2.5 text-slate-700 dark:text-slate-300">
+                      <div className="w-8 h-8 rounded-xl bg-purple-500/10 dark:bg-purple-500/20 text-purple-600 dark:text-purple-400 flex items-center justify-center shrink-0 border border-purple-500/20">
+                        <FolderArchive className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="font-bold text-xs text-slate-900 dark:text-slate-100">مسیر ذخیره فایل‌های زیپ (ZIP):</span>
+                          <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-950/80 text-emerald-800 dark:text-emerald-300 font-bold border border-emerald-300 dark:border-emerald-800">
+                            ✓ ذخیره‌سازی دائمی روی هاست (خارج از کانتینر)
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                          تمام نسخه‌های پشتیبان با نام پیشوند <code className="font-mono text-purple-600 dark:text-purple-400 font-bold">Backup-Homepage-*.zip</code> ذخیره می‌شوند.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1 border-t border-purple-200/50 dark:border-purple-900/30 text-[11px]">
+                    <div className="flex items-center justify-between gap-2 p-2 rounded-lg bg-white/80 dark:bg-slate-900/80 border border-purple-100 dark:border-purple-950">
+                      <span className="text-slate-600 dark:text-slate-400 font-medium">مسیر روی سیستم میزبان (هاست / خارج از داکر):</span>
+                      <code className="font-mono text-xs font-bold text-emerald-600 dark:text-emerald-400 select-all" dir="ltr">
+                        ./data/backups
+                      </code>
+                    </div>
+
+                    <div className="flex items-center justify-between gap-2 p-2 rounded-lg bg-white/80 dark:bg-slate-900/80 border border-purple-100 dark:border-purple-950">
+                      <span className="text-slate-600 dark:text-slate-400 font-medium">مسیر درون کانتینر داکر:</span>
+                      <code className="font-mono text-xs font-bold text-purple-700 dark:text-purple-300 select-all" dir="ltr">
+                        {backupsDir || '/app/data/backups'}
+                      </code>
+                    </div>
                   </div>
                 </div>
 

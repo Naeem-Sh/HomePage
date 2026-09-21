@@ -534,7 +534,7 @@ export const PublicHomepage: React.FC<PublicHomepageProps> = ({
             </div>
 
             <h2 className="text-base sm:text-lg font-black tracking-tight text-slate-900 dark:text-white">
-              وقت بخیر؛ به <span className="text-blue-600 dark:text-blue-400">پرتال سامانه‌های داخلی</span> خوش آمدید
+              وقت بخیر؛ به <span className="text-blue-600 dark:text-blue-400">پورتال سامانه‌های داخلی</span> خوش آمدید
             </h2>
 
             <p className="text-xs text-slate-500 dark:text-slate-400 font-normal">

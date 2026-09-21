@@ -341,8 +341,15 @@ export const api = {
   },
 
   // Backup & Restore (Full ZIP & Legacy JSON)
-  listBackups: (): Promise<BackupItem[]> => {
-    return request('/api/admin/backups');
+  listBackups: async (): Promise<{ backups: BackupItem[]; backupsDir: string }> => {
+    const res = await request<any>('/api/admin/backups');
+    if (Array.isArray(res)) {
+      return { backups: res, backupsDir: './data/backups' };
+    }
+    return {
+      backups: Array.isArray(res.backups) ? res.backups : [],
+      backupsDir: res.backupsDir || './data/backups'
+    };
   },
 
   createBackup: (): Promise<BackupItem> => {

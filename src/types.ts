@@ -139,6 +139,7 @@ export interface SystemInfo {
   storageUsedPercent?: number;
   dataDir?: string;
   dbFile?: string;
+  backupsDir?: string;
   isExternalDataDir?: boolean;
 }
 

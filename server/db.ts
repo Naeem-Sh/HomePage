@@ -974,7 +974,7 @@ class DatabaseService {
   public createZipBackup(): BackupItem {
     const timestamp = new Date();
     const dateStr = timestamp.toISOString().replace(/[:.]/g, '-');
-    const id = `backup-${dateStr}`;
+    const id = `Backup-Homepage-${dateStr}`;
     const filename = `${id}.zip`;
     const filePath = path.join(BACKUPS_DIR, filename);
 
