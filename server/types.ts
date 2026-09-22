@@ -69,6 +69,7 @@ export interface ActivityStats {
 export interface SystemSettings {
   title: string;
   subtitle: string;
+  tabTitle?: string;
   logoUrl: string | null;
   backgroundUrl?: string | null;
   uploadedBackgrounds?: UploadedBackground[]; // Up to 10 admin-uploaded backgrounds

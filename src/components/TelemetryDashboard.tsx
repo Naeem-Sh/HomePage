@@ -8,8 +8,7 @@ import {
   BarChart3,
   RotateCcw,
   ChevronDown,
-  ChevronUp,
-  Zap
+  ChevronUp
 } from 'lucide-react';
 import { useTelemetryStats } from '../lib/telemetryTracker';
 import { toPersianDigits } from '../lib/utils';
@@ -38,7 +37,6 @@ export const TelemetryDashboard: React.FC<TelemetryDashboardProps> = ({
   } = useTelemetryStats();
 
   const [isExpanded, setIsExpanded] = useState(false);
-  const [justSimulated, setJustSimulated] = useState(false);
 
   // Format session duration
   const formatDuration = (seconds: number) => {
@@ -53,12 +51,6 @@ export const TelemetryDashboard: React.FC<TelemetryDashboardProps> = ({
 
   // Max visits for chart bar scaling
   const maxHistoryCount = Math.max(1, ...dailyHistory.map((d) => d.count));
-
-  const handleSimulate = () => {
-    simulateNewVisit();
-    setJustSimulated(true);
-    setTimeout(() => setJustSimulated(false), 1200);
-  };
 
   // -------------------------------------------------------------
   // ADMIN DASHBOARD VIEW
@@ -86,20 +78,6 @@ export const TelemetryDashboard: React.FC<TelemetryDashboardProps> = ({
           </div>
 
           <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={handleSimulate}
-              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 border shadow-2xs ${
-                justSimulated
-                  ? 'bg-emerald-500 text-white border-emerald-600 scale-95'
-                  : 'bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border-slate-200 dark:border-slate-700'
-              }`}
-              title="ثبت یک بازدید آزمایشی در لاگ تلمتری"
-            >
-              <Zap className="w-3.5 h-3.5 text-amber-500" />
-              <span>{justSimulated ? 'ثبت شد!' : 'شبیه‌سازی بازدید'}</span>
-            </button>
-
             <button
               type="button"
               onClick={() => {
@@ -195,34 +173,34 @@ export const TelemetryDashboard: React.FC<TelemetryDashboardProps> = ({
         </div>
 
         {/* 7-Day Trend Chart */}
-        <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-950/60 border border-slate-200/60 dark:border-slate-800/60 space-y-3">
+        <div className="p-4 sm:p-5 pb-6 rounded-2xl bg-slate-50 dark:bg-slate-950/60 border border-slate-200/60 dark:border-slate-800/60 space-y-3">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <BarChart3 className="w-4 h-4 text-blue-500" />
-              <span className="text-xs font-bold text-slate-800 dark:text-slate-200">
+              <span className="text-xs sm:text-sm font-bold text-slate-800 dark:text-slate-200">
                 نمودار روند بازدیدهای اخیر (۷ روز گذشته)
               </span>
             </div>
-            <span className="text-[11px] text-slate-500 font-mono">
+            <span className="text-[11px] sm:text-xs text-slate-500 font-mono">
               مجموع ۷ روز: {toPersianDigits(dailyHistory.reduce((acc, curr) => acc + curr.count, 0))} بازدید
             </span>
           </div>
 
-          <div className="grid grid-cols-7 gap-2 pt-4 items-end h-28">
+          <div className="grid grid-cols-7 gap-1.5 sm:gap-3 pt-3 pb-2 items-end h-36 sm:h-44">
             {dailyHistory.map((item, idx) => {
-              const heightPercent = Math.max(12, Math.round((item.count / maxHistoryCount) * 100));
-              const isToday = idx === dailyHistory.length - 1;
+              const heightPercent = Math.max(14, Math.round((item.count / maxHistoryCount) * 100));
+              const isToday = item.label === 'امروز' || idx === dailyHistory.length - 1;
               return (
-                <div key={item.date} className="flex flex-col items-center gap-1.5 h-full justify-end group">
-                  <span className="text-[10px] font-mono font-bold text-slate-500 dark:text-slate-400 group-hover:text-blue-500 transition-colors">
+                <div key={item.date} className="flex flex-col items-center justify-end h-full group select-none">
+                  <span className="shrink-0 text-xs sm:text-sm font-mono font-bold text-slate-700 dark:text-slate-200 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors mb-1.5">
                     {toPersianDigits(item.count)}
                   </span>
-                  <div className="w-full max-w-[28px] bg-slate-200 dark:bg-slate-800 rounded-t-lg overflow-hidden flex items-end h-full">
+                  <div className="flex-1 w-full max-w-[32px] sm:max-w-[42px] min-h-[48px] bg-slate-200/90 dark:bg-slate-800 rounded-t-xl overflow-hidden flex items-end my-1 border border-slate-300/40 dark:border-white/5 shadow-2xs">
                     <motion.div
                       initial={{ height: 0 }}
                       animate={{ height: `${heightPercent}%` }}
                       transition={{ duration: 0.5, delay: idx * 0.05 }}
-                      className={`w-full rounded-t-lg transition-colors ${
+                      className={`w-full rounded-t-xl transition-colors ${
                         isToday
                           ? 'bg-gradient-to-t from-blue-600 to-indigo-500 shadow-xs'
                           : 'bg-gradient-to-t from-slate-400 to-slate-300 dark:from-slate-700 dark:to-slate-600 group-hover:from-blue-500 group-hover:to-blue-400'
@@ -230,10 +208,10 @@ export const TelemetryDashboard: React.FC<TelemetryDashboardProps> = ({
                     />
                   </div>
                   <span
-                    className={`text-[10px] font-semibold truncate ${
+                    className={`shrink-0 text-[11px] sm:text-xs font-bold leading-normal text-center mt-1.5 px-1 sm:px-1.5 py-0.5 rounded-md transition-colors whitespace-nowrap ${
                       isToday
-                        ? 'text-blue-600 dark:text-blue-400 font-bold'
-                        : 'text-slate-500 dark:text-slate-400'
+                        ? 'text-blue-600 dark:text-blue-400 font-extrabold bg-blue-50 dark:bg-blue-950/60 border border-blue-200/80 dark:border-blue-800/80'
+                        : 'text-slate-700 dark:text-slate-300 group-hover:text-slate-900 dark:group-hover:text-white'
                     }`}
                   >
                     {item.label}
@@ -335,14 +313,14 @@ export const TelemetryDashboard: React.FC<TelemetryDashboardProps> = ({
             animate={{ height: 'auto', opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}
             transition={{ duration: 0.25 }}
-            className="border-t border-slate-200/80 dark:border-white/[0.08] p-4 sm:p-5 bg-slate-50/50 dark:bg-black/20 space-y-4 overflow-hidden"
+            className="border-t border-slate-200/80 dark:border-white/[0.08] p-4 sm:p-6 pb-6 sm:pb-7 bg-slate-50/50 dark:bg-black/20 space-y-4 overflow-hidden"
           >
             {/* 7-Day Trend Chart */}
             <div className="space-y-3">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div className="flex items-center gap-2">
                   <TrendingUp className="w-4 h-4 text-blue-500" />
-                  <span className="text-xs font-bold text-slate-800 dark:text-slate-200">
+                  <span className="text-xs sm:text-sm font-bold text-slate-800 dark:text-slate-200">
                     نمودار مقایسه‌ای بازدیدهای ۷ روز اخیر
                   </span>
                 </div>
@@ -351,28 +329,23 @@ export const TelemetryDashboard: React.FC<TelemetryDashboardProps> = ({
                     کل بازدیدهای ثبت‌شده:{' '}
                     <strong className="text-slate-800 dark:text-slate-200 font-mono">{toPersianDigits(totalVisits)}</strong>
                   </span>
-                  <button
-                    type="button"
-                    onClick={handleSimulate}
-                    className="px-2.5 py-1 rounded-xl text-[11px] font-bold bg-blue-50 hover:bg-blue-100 dark:bg-blue-950/60 text-blue-600 dark:text-blue-300 border border-blue-200 dark:border-blue-800 transition-colors cursor-pointer flex items-center gap-1"
-                  >
-                    <Zap className="w-3.5 h-3.5 text-amber-500" />
-                    <span>{justSimulated ? 'ثبت شد!' : '+ ثبت بازدید آزمایشی'}</span>
-                  </button>
                 </div>
               </div>
 
               {/* 7-Day Bars */}
-              <div className="grid grid-cols-7 gap-2 sm:gap-3 pt-3 items-end h-24 sm:h-28">
+              <div className="grid grid-cols-7 gap-1.5 sm:gap-3 pt-3 pb-2 items-end h-36 sm:h-44">
                 {dailyHistory.map((item, idx) => {
-                  const heightPercent = Math.max(12, Math.round((item.count / maxHistoryCount) * 100));
-                  const isToday = idx === dailyHistory.length - 1;
+                  const heightPercent = Math.max(14, Math.round((item.count / maxHistoryCount) * 100));
+                  const isToday = item.label === 'امروز' || idx === dailyHistory.length - 1;
                   return (
-                    <div key={item.date} className="flex flex-col items-center gap-1.5 h-full justify-end group">
-                      <span className="text-[10px] font-mono font-bold text-slate-600 dark:text-slate-300 group-hover:text-blue-500 transition-colors">
+                    <div key={item.date} className="flex flex-col items-center justify-end h-full group select-none">
+                      {/* Count */}
+                      <span className="shrink-0 text-xs sm:text-sm font-mono font-bold text-slate-700 dark:text-slate-200 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors mb-1.5">
                         {toPersianDigits(item.count)}
                       </span>
-                      <div className="w-full max-w-[36px] bg-slate-200/80 dark:bg-white/[0.06] rounded-t-xl overflow-hidden flex items-end h-full">
+
+                      {/* Bar Track */}
+                      <div className="flex-1 w-full max-w-[34px] sm:max-w-[44px] min-h-[48px] bg-slate-200/90 dark:bg-white/[0.08] rounded-t-xl overflow-hidden flex items-end my-1 border border-slate-300/40 dark:border-white/5 shadow-2xs">
                         <motion.div
                           initial={{ height: 0 }}
                           animate={{ height: `${heightPercent}%` }}
@@ -384,11 +357,13 @@ export const TelemetryDashboard: React.FC<TelemetryDashboardProps> = ({
                           }`}
                         />
                       </div>
+
+                      {/* Day Label */}
                       <span
-                        className={`text-[10px] font-medium truncate ${
+                        className={`shrink-0 text-[11px] sm:text-xs font-bold leading-normal text-center mt-1.5 px-1 sm:px-1.5 py-0.5 rounded-md transition-colors whitespace-nowrap ${
                           isToday
-                            ? 'text-blue-600 dark:text-blue-400 font-bold'
-                            : 'text-slate-500 dark:text-slate-400'
+                            ? 'text-blue-600 dark:text-blue-400 font-extrabold bg-blue-50 dark:bg-blue-950/60 border border-blue-200/80 dark:border-blue-800/80'
+                            : 'text-slate-700 dark:text-slate-300 group-hover:text-slate-900 dark:group-hover:text-white'
                         }`}
                       >
                         {item.label}

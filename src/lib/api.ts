@@ -10,6 +10,7 @@ import {
   AuditLog,
   TestResult,
   BackupItem,
+  BackupInspection,
   ActivityStats
 } from '../types';
 
@@ -382,6 +383,10 @@ export const api = {
   getBackupDownloadUrl: (id: string): string => {
     const token = getStoredToken();
     return `/api/admin/backups/${encodeURIComponent(id)}/download${token ? `?token=${encodeURIComponent(token)}` : ''}`;
+  },
+
+  inspectBackup: (id: string): Promise<BackupInspection> => {
+    return request(`/api/admin/backups/${encodeURIComponent(id)}/inspect`);
   },
 
   exportBackup: async (): Promise<any> => {

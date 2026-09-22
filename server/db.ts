@@ -418,8 +418,9 @@ const DEFAULT_APPLICATIONS: Application[] = [
 ];
 
 const DEFAULT_SETTINGS: SystemSettings = {
-  title: 'Linux Services Hub',
-  subtitle: 'Self-Hosted Network Resources & Applications',
+  title: 'مدیریت منابع انسانی ایران',
+  subtitle: 'دفتر نمایندگی مشهد',
+  tabTitle: 'پورتال شیراز',
   logoUrl: null,
   defaultTheme: 'light',
   clockType: 'analog',
@@ -905,11 +906,20 @@ class DatabaseService {
         const stat = fs.statSync(filePath);
         const id = file.replace(/\.zip$/, '');
 
-        let stats = {
+        let stats: any = {
           applicationsCount: 0,
           categoriesCount: 0,
           usersCount: 0,
-          uploadsCount: 0
+          uploadsCount: 0,
+          buttonFilesCount: 0,
+          buttonIconsCount: 0,
+          homepageTitle: 'Linux Services Hub',
+          homepageSubtitle: 'Self-Hosted Network Resources & Applications',
+          hasCustomLogo: false,
+          logoFilename: undefined,
+          hasCustomBackground: false,
+          uploadedBackgroundsCount: 0,
+          customFooterText: ''
         };
         let createdAt = stat.mtime.toISOString();
 
@@ -918,15 +928,57 @@ class DatabaseService {
           const manifestEntry = zip.getEntry('manifest.json');
           if (manifestEntry) {
             const m = JSON.parse(manifestEntry.getData().toString('utf-8'));
-            if (m.stats) stats = m.stats;
+            if (m.stats) stats = { ...stats, ...m.stats };
             if (m.createdAt) createdAt = m.createdAt;
-          } else {
+            if (m.customization) {
+              if (!stats.homepageTitle && m.customization.title) stats.homepageTitle = m.customization.title;
+              if (!stats.homepageSubtitle && m.customization.subtitle) stats.homepageSubtitle = m.customization.subtitle;
+              if (stats.hasCustomLogo === undefined && m.customization.hasCustomLogo !== undefined) stats.hasCustomLogo = m.customization.hasCustomLogo;
+            }
+          }
+
+          // If stats doesn't have homepageTitle or counts, inspect settings.json or database.json
+          if (!stats.homepageTitle || stats.applicationsCount === 0) {
             const dbEntry = zip.getEntry('database.json');
             if (dbEntry) {
-              const dbParsed = JSON.parse(dbEntry.getData().toString('utf-8'));
-              stats.applicationsCount = dbParsed.applications?.length || 0;
-              stats.categoriesCount = dbParsed.categories?.length || 0;
-              stats.usersCount = dbParsed.users?.length || 0;
+              try {
+                const dbParsed = JSON.parse(dbEntry.getData().toString('utf-8'));
+                stats.applicationsCount = stats.applicationsCount || dbParsed.applications?.length || 0;
+                stats.categoriesCount = stats.categoriesCount || dbParsed.categories?.length || 0;
+                stats.usersCount = stats.usersCount || dbParsed.users?.length || 0;
+                if (dbParsed.settings) {
+                  stats.homepageTitle = stats.homepageTitle || dbParsed.settings.title;
+                  stats.homepageSubtitle = stats.homepageSubtitle || dbParsed.settings.subtitle;
+                  stats.hasCustomLogo = stats.hasCustomLogo ?? Boolean(dbParsed.settings.logoUrl);
+                  if (dbParsed.settings.logoUrl) stats.logoFilename = path.basename(dbParsed.settings.logoUrl);
+                  stats.hasCustomBackground = stats.hasCustomBackground ?? Boolean(dbParsed.settings.backgroundUrl);
+                  stats.uploadedBackgroundsCount = stats.uploadedBackgroundsCount || (Array.isArray(dbParsed.settings.uploadedBackgrounds) ? dbParsed.settings.uploadedBackgrounds.length : 0);
+                  stats.customFooterText = stats.customFooterText || dbParsed.settings.customFooterText;
+                }
+              } catch {}
+            }
+            const setEntry = zip.getEntry('settings.json') || zip.getEntry('branding/homepage-customization.json');
+            if (setEntry) {
+              try {
+                const setParsed = JSON.parse(setEntry.getData().toString('utf-8'));
+                stats.homepageTitle = stats.homepageTitle || setParsed.title;
+                stats.homepageSubtitle = stats.homepageSubtitle || setParsed.subtitle;
+                stats.hasCustomLogo = stats.hasCustomLogo ?? Boolean(setParsed.logoUrl);
+                if (setParsed.logoUrl) stats.logoFilename = path.basename(setParsed.logoUrl);
+                stats.hasCustomBackground = stats.hasCustomBackground ?? Boolean(setParsed.backgroundUrl);
+                stats.customFooterText = stats.customFooterText || setParsed.customFooterText;
+              } catch {}
+            }
+          }
+
+          // Count button files and icons if zero or undefined
+          if (!stats.buttonFilesCount || !stats.buttonIconsCount) {
+            const entries = zip.getEntries();
+            if (!stats.buttonFilesCount) {
+              stats.buttonFilesCount = entries.filter(e => e.entryName.startsWith('button-documents/') || e.entryName.startsWith('uploads/doc-')).length;
+            }
+            if (!stats.buttonIconsCount) {
+              stats.buttonIconsCount = entries.filter(e => e.entryName.startsWith('button-icons/') || e.entryName.startsWith('uploads/icons/')).length;
             }
           }
         } catch (e) {
@@ -991,7 +1043,296 @@ class DatabaseService {
     zip.addFile('settings.json', Buffer.from(JSON.stringify(this.schema.settings, null, 2), 'utf-8'));
     zip.addFile('audit-logs.json', Buffer.from(JSON.stringify(this.schema.auditLogs, null, 2), 'utf-8'));
 
-    // 3. Complete formatted Excel Workbook (.xlsx) inside ZIP package for maximum portability
+    // 3. Homepage Branding, Title, Subtitle, and Customization Metadata
+    const hpCustomization = {
+      title: this.schema.settings.title || 'Linux Services Hub',
+      subtitle: this.schema.settings.subtitle || 'Self-Hosted Network Resources & Applications',
+      logoUrl: this.schema.settings.logoUrl || null,
+      backgroundUrl: this.schema.settings.backgroundUrl || null,
+      uploadedBackgrounds: this.schema.settings.uploadedBackgrounds || [],
+      defaultTheme: this.schema.settings.defaultTheme || 'light',
+      clockType: this.schema.settings.clockType || 'analog',
+      showDate: this.schema.settings.showDate !== false,
+      showSeconds: this.schema.settings.showSeconds !== false,
+      gridColumns: this.schema.settings.gridColumns || 4,
+      publicSearch: this.schema.settings.publicSearch !== false,
+      customFooterText: this.schema.settings.customFooterText || 'Developed by : N.Shaaeri',
+      telemetryPosition: this.schema.settings.telemetryPosition || 'top',
+      showTelemetryBar: this.schema.settings.showTelemetryBar !== false,
+      backgroundBlur: Boolean(this.schema.settings.backgroundBlur),
+      backgroundOverlayOpacity: this.schema.settings.backgroundOverlayOpacity ?? 40
+    };
+
+    zip.addFile('customization.json', Buffer.from(JSON.stringify(hpCustomization, null, 2), 'utf-8'));
+    zip.addFile('branding/homepage-customization.json', Buffer.from(JSON.stringify(hpCustomization, null, 2), 'utf-8'));
+
+    const brandingReadme = `======================================================================
+راهنمای شخصی‌سازی صفحه اول پورتال (HOMEPAGE BRANDING & CUSTOMIZATION)
+======================================================================
+عنوان صفحه اول (Title): ${hpCustomization.title}
+زیرعنوان صفحه اول (Subtitle): ${hpCustomization.subtitle}
+لوگوی صفحه اول: ${hpCustomization.logoUrl ? hpCustomization.logoUrl : 'لوگوی استاندارد'}
+تصویر پس‌زمینه: ${hpCustomization.backgroundUrl ? hpCustomization.backgroundUrl : 'رنگ پس‌زمینه استاندارد'}
+تعداد تصاویر پس‌زمینه در گالری: ${(hpCustomization.uploadedBackgrounds || []).length}
+نوع ساعت: ${hpCustomization.clockType}
+حالت پیش‌فرض تم: ${hpCustomization.defaultTheme}
+تعداد ستون‌ها در دسکتاپ: ${hpCustomization.gridColumns}
+متن پاورقی: ${hpCustomization.customFooterText}
+
+این فایل زیپ شامل تمام تنظیمات صفحه اول، پایگاه‌داده، عکس‌های آپلودشده برای آیکون‌های دکمه‌ها،
+اسناد پیوست و لوگوی اصلی پورتال است و برنامه در هنگام بازیابی (Restore) دقیقاً مثل قبل کار خواهد کرد.
+======================================================================`;
+    zip.addFile('branding/README-شخصی‌سازی.txt', Buffer.from(brandingReadme, 'utf-8'));
+    zip.addFile('README-راهنمای-پشتیبان.txt', Buffer.from(brandingReadme, 'utf-8'));
+
+    // 4. Collect and package ALL uploaded files, documents, and custom button icons
+    const packagedFiles = new Map<string, {
+      fullPath: string;
+      zipPath: string;
+      sizeBytes: number;
+      appName?: string;
+      originalName?: string;
+      role: string;
+    }>();
+
+    // Helper to find file across UPLOADS_DIR, localProjectDataDir, and DATA_DIR
+    const locateFileOnDisk = (candidateRelPath: string): string | null => {
+      if (!candidateRelPath) return null;
+      const cleanPath = candidateRelPath.replace(/^\/+/, '').replace(/^uploads\//, '');
+      const base = path.basename(cleanPath);
+      const candidates = [
+        path.join(UPLOADS_DIR, cleanPath),
+        path.join(UPLOADS_DIR, 'icons', base),
+        path.join(UPLOADS_DIR, base),
+        path.join(localProjectDataDir, 'uploads', cleanPath),
+        path.join(localProjectDataDir, 'uploads', 'icons', base),
+        path.join(localProjectDataDir, 'uploads', base),
+        path.join(DATA_DIR, cleanPath),
+        path.join(DATA_DIR, 'uploads', cleanPath),
+        path.join(DATA_DIR, 'uploads', 'icons', base)
+      ];
+      for (const cand of candidates) {
+        try {
+          if (fs.existsSync(cand) && fs.statSync(cand).isFile()) {
+            return cand;
+          }
+        } catch {}
+      }
+      return null;
+    };
+
+    // 4a. Recursively scan UPLOADS_DIR and ensure all files are added
+    const scanDir = (dirPath: string, zipPrefix: string) => {
+      if (!fs.existsSync(dirPath)) return;
+      try {
+        const items = fs.readdirSync(dirPath);
+        for (const item of items) {
+          const fullPath = path.join(dirPath, item);
+          try {
+            const stat = fs.statSync(fullPath);
+            if (stat.isDirectory()) {
+              scanDir(fullPath, `${zipPrefix}/${item}`);
+            } else if (stat.isFile()) {
+              const zipPath = `${zipPrefix}/${item}`;
+              if (!packagedFiles.has(zipPath)) {
+                packagedFiles.set(zipPath, {
+                  fullPath,
+                  zipPath,
+                  sizeBytes: stat.size,
+                  role: item.startsWith('doc-')
+                    ? 'سند یا فایل بارگذاری‌شده دکمه'
+                    : (item.startsWith('icon-') ? 'عکس یا آیکون اختصاصی دکمه' : (item.startsWith('logo-') ? 'لوگوی صفحه اول' : 'فایل آپلود شده'))
+                });
+              }
+            }
+          } catch {}
+        }
+      } catch {}
+    };
+
+    scanDir(UPLOADS_DIR, 'uploads');
+
+    // Also scan localProjectDataDir/uploads if distinct
+    const localUploadsDir = path.join(localProjectDataDir, 'uploads');
+    if (path.resolve(localUploadsDir) !== path.resolve(UPLOADS_DIR)) {
+      scanDir(localUploadsDir, 'uploads');
+    }
+
+    // 4b. Specifically verify and map every Application's attached files, documents, and custom icons
+    let buttonFilesCount = 0;
+    let buttonIconsCount = 0;
+
+    for (const app of this.schema.applications) {
+      const safeAppName = (app.name || 'button').replace(/[/\\?%*:|"<>]/g, '_').trim();
+
+      // Check attached document / file (fileUrl or url pointing to upload or document)
+      const docCandidate = app.fileUrl || (app.url && (app.url.startsWith('/uploads/') || app.url.startsWith('uploads/')) ? app.url : null);
+      if (docCandidate) {
+        const diskPath = locateFileOnDisk(docCandidate);
+        if (diskPath) {
+          buttonFilesCount++;
+          const stat = fs.statSync(diskPath);
+          const ext = path.extname(diskPath) || '.bin';
+          const origName = app.fileName || path.basename(diskPath);
+          const standardZipPath = `uploads/${path.basename(diskPath)}`;
+
+          packagedFiles.set(standardZipPath, {
+            fullPath: diskPath,
+            zipPath: standardZipPath,
+            sizeBytes: stat.size,
+            appName: app.name,
+            originalName: origName,
+            role: 'سند پیوست دکمه (Document / Attachment)'
+          });
+
+          // Also add friendly named copy in button-documents/ for direct user readability when extracting ZIP
+          const friendlyZipPath = `button-documents/${safeAppName} - ${origName.endsWith(ext) ? origName : origName + ext}`;
+          packagedFiles.set(friendlyZipPath, {
+            fullPath: diskPath,
+            zipPath: friendlyZipPath,
+            sizeBytes: stat.size,
+            appName: app.name,
+            originalName: origName,
+            role: 'نسخه خوانای سند دکمه'
+          });
+        }
+      }
+
+      // Check custom uploaded icon / image (icon starting with /uploads/ or uploads/ or data:image/)
+      if (app.icon) {
+        if (app.icon.startsWith('/uploads/') || app.icon.startsWith('uploads/')) {
+          const diskPath = locateFileOnDisk(app.icon);
+          if (diskPath) {
+            buttonIconsCount++;
+            const stat = fs.statSync(diskPath);
+            const ext = path.extname(diskPath) || '.png';
+            const baseName = path.basename(diskPath);
+            const standardZipPath = `uploads/icons/${baseName}`;
+
+            packagedFiles.set(standardZipPath, {
+              fullPath: diskPath,
+              zipPath: standardZipPath,
+              sizeBytes: stat.size,
+              appName: app.name,
+              originalName: baseName,
+              role: 'عکس و آیکون اختصاصی دکمه (Button Custom Icon)'
+            });
+
+            // Also friendly named copy in button-icons/
+            const friendlyZipPath = `button-icons/${safeAppName} - آیکون${ext}`;
+            packagedFiles.set(friendlyZipPath, {
+              fullPath: diskPath,
+              zipPath: friendlyZipPath,
+              sizeBytes: stat.size,
+              appName: app.name,
+              originalName: baseName,
+              role: 'نسخه خوانای عکس آیکون دکمه'
+            });
+          }
+        } else if (app.icon.startsWith('data:image/')) {
+          buttonIconsCount++;
+          try {
+            const parts = app.icon.split(',');
+            const buf = Buffer.from(parts[1] || parts[0], 'base64');
+            const iconFilename = `icon-${app.id}.png`;
+            const iconZipPath = `uploads/icons/${iconFilename}`;
+            zip.addFile(iconZipPath, buf);
+            zip.addFile(`button-icons/${safeAppName} - آیکون.png`, buf);
+          } catch {}
+        }
+      }
+    }
+
+    // 4c. Check settings assets (logoUrl, backgroundUrl, uploadedBackgrounds)
+    let hasCustomLogo = false;
+    let logoFilename: string | undefined = undefined;
+
+    if (this.schema.settings.logoUrl) {
+      if (this.schema.settings.logoUrl.startsWith('/uploads/') || this.schema.settings.logoUrl.startsWith('uploads/')) {
+        const diskPath = locateFileOnDisk(this.schema.settings.logoUrl);
+        if (diskPath) {
+          hasCustomLogo = true;
+          logoFilename = path.basename(diskPath);
+          const stat = fs.statSync(diskPath);
+          const ext = path.extname(diskPath) || '.png';
+          const stdPath = `uploads/${logoFilename}`;
+
+          packagedFiles.set(stdPath, {
+            fullPath: diskPath,
+            zipPath: stdPath,
+            sizeBytes: stat.size,
+            role: 'لوگوی صفحه اول پورتال (Homepage Logo)'
+          });
+
+          // Also place in branding folder
+          packagedFiles.set(`branding/logo${ext}`, {
+            fullPath: diskPath,
+            zipPath: `branding/logo${ext}`,
+            sizeBytes: stat.size,
+            role: 'لوگوی صفحه اول (پوشه برندینگ)'
+          });
+        }
+      } else if (this.schema.settings.logoUrl.startsWith('data:image/')) {
+        hasCustomLogo = true;
+        logoFilename = 'logo.png';
+        try {
+          const parts = this.schema.settings.logoUrl.split(',');
+          const buf = Buffer.from(parts[1] || parts[0], 'base64');
+          zip.addFile('uploads/logo.png', buf);
+          zip.addFile('branding/logo.png', buf);
+        } catch {}
+      }
+    }
+
+    if (this.schema.settings.backgroundUrl && (this.schema.settings.backgroundUrl.startsWith('/uploads/') || this.schema.settings.backgroundUrl.startsWith('uploads/'))) {
+      const diskPath = locateFileOnDisk(this.schema.settings.backgroundUrl);
+      if (diskPath) {
+        const stat = fs.statSync(diskPath);
+        const ext = path.extname(diskPath) || '.jpg';
+        const bgFilename = path.basename(diskPath);
+        packagedFiles.set(`uploads/${bgFilename}`, {
+          fullPath: diskPath,
+          zipPath: `uploads/${bgFilename}`,
+          sizeBytes: stat.size,
+          role: 'تصویر پس‌زمینه فعال (Active Background)'
+        });
+        packagedFiles.set(`branding/background${ext}`, {
+          fullPath: diskPath,
+          zipPath: `branding/background${ext}`,
+          sizeBytes: stat.size,
+          role: 'تصویر پس‌زمینه فعال (پوشه برندینگ)'
+        });
+      }
+    }
+
+    if (Array.isArray(this.schema.settings.uploadedBackgrounds)) {
+      for (const bg of this.schema.settings.uploadedBackgrounds) {
+        if (bg.url && (bg.url.startsWith('/uploads/') || bg.url.startsWith('uploads/'))) {
+          const diskPath = locateFileOnDisk(bg.url);
+          if (diskPath) {
+            const stat = fs.statSync(diskPath);
+            packagedFiles.set(`uploads/${path.basename(diskPath)}`, {
+              fullPath: diskPath,
+              zipPath: `uploads/${path.basename(diskPath)}`,
+              sizeBytes: stat.size,
+              role: 'تصویر پس‌زمینه گالری (Gallery Background)'
+            });
+          }
+        }
+      }
+    }
+
+    // Now write all packaged files directly to ZIP buffer
+    for (const fileInfo of packagedFiles.values()) {
+      try {
+        const buffer = fs.readFileSync(fileInfo.fullPath);
+        zip.addFile(fileInfo.zipPath, buffer);
+      } catch (err) {
+        console.warn(`[Backup Warning] Could not read file to add to ZIP: ${fileInfo.fullPath}`, err);
+      }
+    }
+
+    // 4. Formatted Excel Workbook with dedicated Attachments sheet
     try {
       const wb = XLSX.utils.book_new();
 
@@ -1052,43 +1393,62 @@ class DatabaseService {
       const wsSettings = XLSX.utils.json_to_sheet(settingsRows);
       XLSX.utils.book_append_sheet(wb, wsSettings, 'تنظیمات (Settings)');
 
+      // 4th Sheet: Attachments and Button Files
+      const filesRows = Array.from(packagedFiles.values())
+        .filter(f => !f.zipPath.startsWith('button-'))
+        .map((f, idx) => ({
+          'ردیف': idx + 1,
+          'نام دکمه / بخش': f.appName || 'سامانه',
+          'نقش فایل': f.role,
+          'نام فایل اصلی': f.originalName || path.basename(f.zipPath),
+          'مسیر در سرور': `/${f.zipPath}`,
+          'مسیر در آرشیو زیپ': f.zipPath,
+          'حجم (کیلوبایت)': Math.max(1, Math.round(f.sizeBytes / 1024)),
+          'وضعیت': 'موجود در بسته پشتیبان ZIP'
+        }));
+      const wsFiles = XLSX.utils.json_to_sheet(filesRows.length > 0 ? filesRows : [{ 'وضعیت': 'هنوز فایلی آپلود نشده است' }]);
+      XLSX.utils.book_append_sheet(wb, wsFiles, 'فایل‌ها و اسناد پیوست (Files)');
+
       const xlsxBuffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
       zip.addFile('homelab-data.xlsx', xlsxBuffer);
     } catch (e) {
       console.warn('Could not add Excel file to backup zip:', e);
     }
 
-    // 4. Uploads directory (all icons, logos, backgrounds, and attached documents)
-    let uploadsCount = 0;
-    if (fs.existsSync(UPLOADS_DIR)) {
-      const addDirRecursive = (dirPath: string, zipRelativePath: string) => {
-        const items = fs.readdirSync(dirPath);
-        for (const item of items) {
-          const fullPath = path.join(dirPath, item);
-          const stat = fs.statSync(fullPath);
-          if (stat.isDirectory()) {
-            addDirRecursive(fullPath, `${zipRelativePath}/${item}`);
-          } else if (stat.isFile()) {
-            zip.addLocalFile(fullPath, zipRelativePath);
-            uploadsCount++;
-          }
-        }
-      };
-      addDirRecursive(UPLOADS_DIR, 'uploads');
-    }
+    // Distinct physical files count
+    const uniqueFilesCount = Array.from(packagedFiles.values()).filter(f => !f.zipPath.startsWith('button-')).length;
 
     const stats = {
       applicationsCount: this.schema.applications.length,
       categoriesCount: this.schema.categories.length,
       usersCount: this.schema.users.length,
-      uploadsCount
+      uploadsCount: uniqueFilesCount,
+      buttonFilesCount,
+      buttonIconsCount,
+      homepageTitle: this.schema.settings.title || 'Linux Services Hub',
+      homepageSubtitle: this.schema.settings.subtitle || '',
+      hasCustomLogo,
+      logoFilename,
+      hasCustomBackground: Boolean(this.schema.settings.backgroundUrl),
+      uploadedBackgroundsCount: Array.isArray(this.schema.settings.uploadedBackgrounds) ? this.schema.settings.uploadedBackgrounds.length : 0,
+      customFooterText: this.schema.settings.customFooterText || ''
     };
+
+    const filesManifest = Array.from(packagedFiles.values()).map(f => ({
+      zipPath: f.zipPath,
+      sizeBytes: f.sizeBytes,
+      appName: f.appName || null,
+      originalName: f.originalName || null,
+      role: f.role
+    }));
 
     const manifest = {
       id,
-      version: '2.0.1',
+      version: '2.2.0',
       createdAt: timestamp.toISOString(),
-      stats
+      stats,
+      customization: hpCustomization,
+      files: filesManifest
     };
     zip.addFile('manifest.json', Buffer.from(JSON.stringify(manifest, null, 2), 'utf-8'));
 
@@ -1102,6 +1462,105 @@ class DatabaseService {
       createdAt: timestamp.toISOString(),
       sizeBytes: stat.size,
       stats
+    };
+  }
+
+  public inspectBackupZip(filePathOrId: string): {
+    id: string;
+    filename: string;
+    createdAt: string;
+    sizeBytes: number;
+    stats: any;
+    files: Array<{
+      name: string;
+      zipPath: string;
+      sizeBytes: number;
+      role: string;
+      appName?: string;
+    }>;
+  } {
+    const fullPath = this.getBackupZipPath(filePathOrId) || filePathOrId;
+    if (!fs.existsSync(fullPath)) {
+      throw new Error('Backup file not found');
+    }
+    const stat = fs.statSync(fullPath);
+    const filename = path.basename(fullPath);
+    const id = filename.replace(/\.zip$/, '');
+
+    const zip = new AdmZip(fullPath);
+    const entries = zip.getEntries();
+
+    let manifest: any = null;
+    const manifestEntry = zip.getEntry('manifest.json');
+    if (manifestEntry) {
+      try {
+        manifest = JSON.parse(manifestEntry.getData().toString('utf-8'));
+      } catch {}
+    }
+
+    const files = entries
+      .filter(e => !e.isDirectory)
+      .map(e => {
+        const norm = e.entryName.replace(/\\/g, '/');
+        let role = 'فایل سامانه';
+        if (norm === 'database.json') role = 'پایگاه داده کامل (JSON)';
+        else if (norm.endsWith('.xlsx')) role = 'کتاب کار اکسل (Excel)';
+        else if (norm.startsWith('branding/')) role = 'تنظیمات و برندینگ صفحه اول';
+        else if (norm.startsWith('button-documents/')) role = 'سند پیوست دکمه';
+        else if (norm.startsWith('button-icons/')) role = 'عکس یا آیکون اختصاصی دکمه';
+        else if (norm.startsWith('uploads/icons/')) role = 'عکس یا آیکون آپلود شده';
+        else if (norm.startsWith('uploads/')) role = 'سند، تصویر یا لوگوی آپلود شده';
+        else if (norm.endsWith('.json')) role = 'داده مدولار';
+
+        const manifestFile = manifest?.files?.find((f: any) => f.zipPath === norm);
+
+        return {
+          name: path.basename(norm),
+          zipPath: norm,
+          sizeBytes: e.header.size,
+          role: manifestFile?.role || role,
+          appName: manifestFile?.appName
+        };
+      });
+
+    let stats = manifest?.stats;
+    if (!stats) {
+      stats = {
+        applicationsCount: entries.filter(e => e.entryName === 'applications.json' || e.entryName === 'database.json').length,
+        categoriesCount: 0,
+        usersCount: 0,
+        uploadsCount: files.filter(f => f.zipPath.startsWith('uploads/')).length,
+        buttonFilesCount: entries.filter(e => e.entryName.startsWith('button-documents/') || e.entryName.startsWith('uploads/doc-')).length,
+        buttonIconsCount: entries.filter(e => e.entryName.startsWith('button-icons/') || e.entryName.startsWith('uploads/icons/')).length,
+        homepageTitle: 'Linux Services Hub',
+        homepageSubtitle: '',
+        hasCustomLogo: entries.some(e => e.entryName.includes('logo')),
+        hasCustomBackground: entries.some(e => e.entryName.includes('background'))
+      };
+
+      const setEntry = zip.getEntry('settings.json') || zip.getEntry('branding/homepage-customization.json') || zip.getEntry('customization.json');
+      if (setEntry) {
+        try {
+          const s = JSON.parse(setEntry.getData().toString('utf-8'));
+          const hp = s.homepage || s;
+          stats.homepageTitle = hp.title || stats.homepageTitle;
+          stats.homepageSubtitle = hp.subtitle || stats.homepageSubtitle;
+          stats.hasCustomLogo = stats.hasCustomLogo || Boolean(hp.logoUrl);
+          if (hp.logoUrl) stats.logoFilename = path.basename(hp.logoUrl);
+          stats.hasCustomBackground = stats.hasCustomBackground || Boolean(hp.backgroundUrl);
+          stats.uploadedBackgroundsCount = Array.isArray(hp.uploadedBackgrounds) ? hp.uploadedBackgrounds.length : 0;
+          stats.customFooterText = hp.customFooterText || '';
+        } catch {}
+      }
+    }
+
+    return {
+      id,
+      filename,
+      createdAt: manifest?.createdAt || stat.mtime.toISOString(),
+      sizeBytes: stat.size,
+      stats,
+      files
     };
   }
 
@@ -1143,7 +1602,9 @@ class DatabaseService {
             this.schema.users = parsed.users;
           }
         }
-        if (parsed.settings) this.schema.settings = { ...this.schema.settings, ...parsed.settings };
+        if (parsed.settings) {
+          this.schema.settings = { ...DEFAULT_SETTINGS, ...this.schema.settings, ...parsed.settings };
+        }
         if (Array.isArray(parsed.auditLogs)) this.schema.auditLogs = parsed.auditLogs;
       }
     } else {
@@ -1156,8 +1617,18 @@ class DatabaseService {
       const userEntry = zipEntries.find((e) => e.entryName === 'users.json' || e.entryName.endsWith('/users.json'));
       if (userEntry) this.schema.users = JSON.parse(userEntry.getData().toString('utf-8'));
 
-      const setEntry = zipEntries.find((e) => e.entryName === 'settings.json' || e.entryName.endsWith('/settings.json'));
-      if (setEntry) this.schema.settings = { ...this.schema.settings, ...JSON.parse(setEntry.getData().toString('utf-8')) };
+      const setEntry = zipEntries.find((e) => e.entryName === 'settings.json' || e.entryName.endsWith('/settings.json') || e.entryName === 'branding/homepage-customization.json');
+      if (setEntry) this.schema.settings = { ...DEFAULT_SETTINGS, ...this.schema.settings, ...JSON.parse(setEntry.getData().toString('utf-8')) };
+    }
+
+    // Also check dedicated customization.json
+    const customEntry = zipEntries.find((e) => e.entryName === 'customization.json' || e.entryName === 'branding/homepage-customization.json');
+    if (customEntry) {
+      try {
+        const customObj = JSON.parse(customEntry.getData().toString('utf-8'));
+        const hp = customObj.homepage || customObj;
+        this.schema.settings = { ...DEFAULT_SETTINGS, ...this.schema.settings, ...hp };
+      } catch {}
     }
 
     // Restore uploads (all icons, logos, backgrounds, documents)
@@ -1165,18 +1636,25 @@ class DatabaseService {
     for (const entry of zipEntries) {
       if (entry.isDirectory) continue;
       const normalizedName = entry.entryName.replace(/\\/g, '/');
-      let relPath = '';
+      let destPath: string | null = null;
 
       if (normalizedName.startsWith('uploads/')) {
-        relPath = normalizedName.replace(/^uploads\//, '');
+        const relPath = normalizedName.replace(/^uploads\//, '');
+        destPath = path.join(UPLOADS_DIR, relPath);
       } else if (normalizedName.includes('/uploads/')) {
-        relPath = normalizedName.split('/uploads/')[1];
+        const relPath = normalizedName.split('/uploads/')[1];
+        destPath = path.join(UPLOADS_DIR, relPath);
       } else if (normalizedName.startsWith('icons/')) {
-        relPath = `icons/${normalizedName.replace(/^icons\//, '')}`;
+        destPath = path.join(UPLOADS_DIR, 'icons', normalizedName.replace(/^icons\//, ''));
+      } else if (normalizedName.startsWith('branding/logo.')) {
+        const logoName = this.schema.settings.logoUrl ? path.basename(this.schema.settings.logoUrl) : `logo${path.extname(normalizedName)}`;
+        destPath = path.join(UPLOADS_DIR, logoName);
+      } else if (normalizedName.startsWith('branding/background.')) {
+        const bgName = this.schema.settings.backgroundUrl ? path.basename(this.schema.settings.backgroundUrl) : `background${path.extname(normalizedName)}`;
+        destPath = path.join(UPLOADS_DIR, bgName);
       }
 
-      if (relPath) {
-        const destPath = path.join(UPLOADS_DIR, relPath);
+      if (destPath) {
         fs.mkdirSync(path.dirname(destPath), { recursive: true });
         fs.writeFileSync(destPath, entry.getData());
         uploadsCount++;

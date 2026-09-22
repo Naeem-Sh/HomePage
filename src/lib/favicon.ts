@@ -7,9 +7,8 @@ export function updateFaviconAndTitle(logoUrl?: string | null, title?: string) {
   if (typeof document === 'undefined') return;
 
   // 1. Update Document Title
-  if (title && title.trim()) {
-    document.title = title.trim();
-  }
+  const resolvedTitle = (title && title.trim()) ? title.trim() : 'پورتال شیراز';
+  document.title = resolvedTitle;
 
   // 2. Resolve Favicon URL
   const targetHref = logoUrl && logoUrl.trim() ? logoUrl.trim() : '/favicon.ico';

@@ -1035,6 +1035,15 @@ router.get('/admin/backups/:id/download', requireAdmin, (req: AuthenticatedReque
   res.download(filePath, filename);
 });
 
+router.get('/admin/backups/:id/inspect', requireAdmin, (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const inspected = db.inspectBackupZip(req.params.id);
+    res.json(inspected);
+  } catch (err: any) {
+    res.status(404).json({ error: err.message || 'Failed to inspect backup file' });
+  }
+});
+
 router.post('/admin/backups/:id/restore', requireAdmin, (req: AuthenticatedRequest, res: Response) => {
   try {
     const result = db.restoreZipBackup(req.params.id);

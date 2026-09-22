@@ -70,15 +70,16 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({ onComplete }) => {
               نام کاربری مدیر
             </label>
             <div className="relative">
-              <User className="absolute right-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+              <User className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
               <input
                 id="setup-admin-username"
                 type="text"
                 required
+                dir="ltr"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
-                placeholder="مثلاً admin"
-                className="w-full pr-10 pl-4 py-2.5 rounded-xl text-sm bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-white/10 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-indigo-500 focus:outline-none text-right"
+                placeholder="admin"
+                className="w-full pl-10 pr-4 py-2.5 rounded-xl text-sm bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-white/10 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-indigo-500 focus:outline-none text-left font-mono tracking-wide"
               />
             </div>
           </div>
@@ -88,15 +89,16 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({ onComplete }) => {
               رمز عبور مدیر
             </label>
             <div className="relative">
-              <Lock className="absolute right-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+              <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
               <input
                 id="setup-admin-password"
                 type="password"
                 required
+                dir="ltr"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder="حداقل ۶ کاراکتر"
-                className="w-full pr-10 pl-4 py-2.5 rounded-xl text-sm bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-white/10 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-indigo-500 focus:outline-none text-right"
+                placeholder="••••••••"
+                className="w-full pl-10 pr-4 py-2.5 rounded-xl text-sm bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-white/10 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-indigo-500 focus:outline-none text-left font-mono tracking-wide"
               />
             </div>
           </div>
@@ -106,15 +108,16 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({ onComplete }) => {
               تکرار رمز عبور مدیر
             </label>
             <div className="relative">
-              <KeyRound className="absolute right-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+              <KeyRound className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
               <input
                 id="setup-admin-password-confirm"
                 type="password"
                 required
+                dir="ltr"
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
-                placeholder="تکرار مجدد رمز عبور"
-                className="w-full pr-10 pl-4 py-2.5 rounded-xl text-sm bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-white/10 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-indigo-500 focus:outline-none text-right"
+                placeholder="••••••••"
+                className="w-full pl-10 pr-4 py-2.5 rounded-xl text-sm bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-white/10 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-indigo-500 focus:outline-none text-left font-mono tracking-wide"
               />
             </div>
           </div>

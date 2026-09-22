@@ -61,7 +61,47 @@ export interface BackupItem {
     categoriesCount: number;
     usersCount: number;
     uploadsCount: number;
+    buttonFilesCount?: number;
+    buttonIconsCount?: number;
+    homepageTitle?: string;
+    homepageSubtitle?: string;
+    hasCustomLogo?: boolean;
+    logoFilename?: string;
+    hasCustomBackground?: boolean;
+    uploadedBackgroundsCount?: number;
+    customFooterText?: string;
   };
+}
+
+export interface BackupInspectionFile {
+  name: string;
+  zipPath: string;
+  sizeBytes: number;
+  role: string;
+  appName?: string;
+}
+
+export interface BackupInspection {
+  id: string;
+  filename: string;
+  createdAt: string;
+  sizeBytes: number;
+  stats: {
+    applicationsCount: number;
+    categoriesCount: number;
+    usersCount: number;
+    uploadsCount: number;
+    buttonFilesCount?: number;
+    buttonIconsCount?: number;
+    homepageTitle?: string;
+    homepageSubtitle?: string;
+    hasCustomLogo?: boolean;
+    logoFilename?: string;
+    hasCustomBackground?: boolean;
+    uploadedBackgroundsCount?: number;
+    customFooterText?: string;
+  };
+  files: BackupInspectionFile[];
 }
 
 export interface ActivityStats {
@@ -72,6 +112,7 @@ export interface ActivityStats {
 export interface SystemSettings {
   title: string;
   subtitle: string;
+  tabTitle?: string;
   logoUrl: string | null;
   backgroundUrl?: string | null;
   uploadedBackgrounds?: UploadedBackground[]; // Up to 10 admin-uploaded background images

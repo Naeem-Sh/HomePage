@@ -8,7 +8,7 @@ import { AuthModal } from './components/AuthModal';
 import { DashboardSwitcher } from './components/DashboardSwitcher';
 import { ThemeToggle } from './components/ThemeToggle';
 import { updateFaviconAndTitle } from './lib/favicon';
-import { Server, RefreshCw, Lock, User, KeyRound, LogIn, ArrowLeft, Shield } from 'lucide-react';
+import { Server, RefreshCw, Lock, User, KeyRound, LogIn, ArrowLeft, Shield, Eye, EyeOff } from 'lucide-react';
 
 export default function App() {
   const [theme, setTheme] = useState<ThemeMode>(() => {
@@ -31,6 +31,7 @@ export default function App() {
   // Admin Direct Login Form State
   const [adminUsername, setAdminUsername] = useState('');
   const [adminPassword, setAdminPassword] = useState('');
+  const [showAdminPassword, setShowAdminPassword] = useState(false);
   const [adminLoginError, setAdminLoginError] = useState<string | null>(null);
   const [isAdminLoggingIn, setIsAdminLoggingIn] = useState(false);
 
@@ -89,16 +90,12 @@ export default function App() {
     loadInitialData();
   }, [loadInitialData]);
 
-  // Synchronize browser tab favicon and title with custom portal logo & title
+  // Synchronize browser tab favicon and independent tab title
   useEffect(() => {
-    if (publicConfig?.settings) {
-      const title = publicConfig.settings.title?.trim() || 'Home';
-      const logoUrl = publicConfig.settings.logoUrl;
-      updateFaviconAndTitle(logoUrl, title);
-    } else {
-      updateFaviconAndTitle(null, 'Home');
-    }
-  }, [publicConfig?.settings?.logoUrl, publicConfig?.settings?.title]);
+    const tabTitle = publicConfig?.settings?.tabTitle || 'پورتال شیراز';
+    const logoUrl = publicConfig?.settings?.logoUrl;
+    updateFaviconAndTitle(logoUrl, tabTitle);
+  }, [publicConfig?.settings?.logoUrl, publicConfig?.settings?.tabTitle]);
 
   const handleAuthSuccess = async (auth: AuthResponse) => {
     setStoredToken(auth.token);
@@ -280,16 +277,17 @@ export default function App() {
                       نام کاربری
                     </label>
                     <div className="relative">
-                      <User className="absolute right-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                      <User className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
                       <input
                         id="admin-login-username"
                         type="text"
                         required
                         autoFocus
+                        dir="ltr"
                         value={adminUsername}
                         onChange={(e) => setAdminUsername(e.target.value)}
-                        placeholder="نام کاربری مدیر (admin)"
-                        className="w-full pr-10 pl-4 py-2.5 rounded-xl text-sm bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-white/10 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-blue-500 focus:outline-none transition-all text-right"
+                        placeholder="admin"
+                        className="w-full pl-10 pr-4 py-2.5 rounded-xl text-sm bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-white/10 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-blue-500 focus:outline-none transition-all text-left font-mono tracking-wide"
                       />
                     </div>
                   </div>
@@ -299,16 +297,25 @@ export default function App() {
                       رمز عبور
                     </label>
                     <div className="relative">
-                      <KeyRound className="absolute right-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                      <KeyRound className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
                       <input
                         id="admin-login-password"
-                        type="password"
+                        type={showAdminPassword ? 'text' : 'password'}
                         required
+                        dir="ltr"
                         value={adminPassword}
                         onChange={(e) => setAdminPassword(e.target.value)}
-                        placeholder="رمز عبور مدیر"
-                        className="w-full pr-10 pl-4 py-2.5 rounded-xl text-sm bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-white/10 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-blue-500 focus:outline-none transition-all text-right"
+                        placeholder="••••••••"
+                        className="w-full pl-10 pr-10 py-2.5 rounded-xl text-sm bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-white/10 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-blue-500 focus:outline-none transition-all text-left font-mono tracking-wide"
                       />
+                      <button
+                        type="button"
+                        onClick={() => setShowAdminPassword(!showAdminPassword)}
+                        className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors cursor-pointer"
+                        title={showAdminPassword ? 'مخفی کردن رمز' : 'نمایش رمز'}
+                      >
+                        {showAdminPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      </button>
                     </div>
                   </div>
 

@@ -1,6 +1,6 @@
 {
-  "name": "Home",
-  "description": "Homelab service launcher and dashboard",
+  "name": "پورتال شیراز",
+  "description": "پورتال شیراز - سامانه دسترسی یکپارچه به خدمات و برنامه‌ها",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

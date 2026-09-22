@@ -426,16 +426,36 @@ export const PublicHomepage: React.FC<PublicHomepageProps> = ({
               </div>
             )}
 
-            <div className="flex flex-col justify-center">
-              <h1 className="text-sm sm:text-base font-black tracking-tight text-slate-900 dark:text-white leading-tight">
-                {safeSettings.title || 'هوم‌لب لینوکس'}
-              </h1>
-              {safeSettings.subtitle && (
-                <span className="text-[10px] uppercase tracking-wider text-slate-500 dark:text-slate-400 font-bold">
-                  {safeSettings.subtitle}
-                </span>
-              )}
-            </div>
+            {(() => {
+              let line1 = safeSettings.title || 'مدیریت منابع انسانی ایران';
+              let line2 = safeSettings.subtitle || '';
+
+              // If subtitle is empty, but title has a hyphen or newline (e.g., 'مدیریت منابع انسانی-دفتر اصفهان')
+              if (!line2 && line1.includes('-')) {
+                const parts = line1.split('-');
+                if (parts.length >= 2) {
+                  line1 = parts[0].trim();
+                  line2 = parts.slice(1).join('-').trim();
+                }
+              } else if (!line2 && line1.includes('\n')) {
+                const parts = line1.split('\n');
+                line1 = parts[0].trim();
+                line2 = parts.slice(1).join(' ').trim();
+              }
+
+              return (
+                <div className="flex flex-col justify-center select-none text-right">
+                  <h1 className="text-sm sm:text-base md:text-lg font-black tracking-tight text-slate-900 dark:text-white leading-snug">
+                    {line1}
+                  </h1>
+                  {line2 ? (
+                    <span className="text-xs sm:text-sm font-bold text-slate-600 dark:text-slate-300 leading-tight mt-0.5">
+                      {line2}
+                    </span>
+                  ) : null}
+                </div>
+              );
+            })()}
           </div>
 
           {/* Right Header Toolbar: Theme, Layout & Admin Icon */}

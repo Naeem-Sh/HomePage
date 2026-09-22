@@ -51,7 +51,8 @@ import {
   FileSpreadsheet,
   FileJson,
   AlertTriangle,
-  RotateCcw
+  RotateCcw,
+  Save
 } from 'lucide-react';
 import {
   Application,
@@ -64,6 +65,7 @@ import {
   ThemeMode,
   UploadedBackground,
   BackupItem,
+  BackupInspection,
   ActivityStats,
   APP_VERSION
 } from '../types';
@@ -405,19 +407,41 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     loadBackups();
   }, []);
 
-  // Synchronize browser tab favicon and title with custom portal logo & title
+  // Synchronize browser tab favicon and independent tab title
   useEffect(() => {
     if (settings) {
-      updateFaviconAndTitle(settings.logoUrl, settings.title || 'هوم‌لب لینوکس');
+      updateFaviconAndTitle(settings.logoUrl, settings.tabTitle || 'پورتال شیراز');
     }
-  }, [settings?.logoUrl, settings?.title]);
+  }, [settings?.logoUrl, settings?.tabTitle]);
 
   // --- ZIP Backup Handlers ---
+  const [inspectingBackup, setInspectingBackup] = useState<BackupInspection | null>(null);
+  const [isLoadingInspection, setIsLoadingInspection] = useState<string | null>(null);
+  const [inspectionFilter, setInspectionFilter] = useState<'all' | 'documents' | 'icons' | 'data'>('all');
+  const [inspectionSearch, setInspectionSearch] = useState('');
+
+  const handleInspectBackup = async (filename: string) => {
+    setIsLoadingInspection(filename);
+    try {
+      const data = await api.inspectBackup(filename);
+      setInspectingBackup(data);
+      setInspectionFilter('all');
+      setInspectionSearch('');
+    } catch (err: any) {
+      setError(err.message || 'خطا در بررسی فایل پشتیبان ZIP');
+    } finally {
+      setIsLoadingInspection(null);
+    }
+  };
+
   const handleCreateZipBackup = async () => {
     setIsCreatingBackup(true);
     try {
-      await api.createBackup();
-      showNotification('نسخه پشتیبان کامل ZIP با موفقیت ایجاد و ذخیره شد.');
+      const res = await api.createBackup();
+      const filesCount = res.stats?.uploadsCount || 0;
+      const buttonDocs = res.stats?.buttonFilesCount || 0;
+      const docMsg = buttonDocs > 0 ? ` و ${toPersianDigits(buttonDocs)} سند پیوست دکمه` : '';
+      showNotification(`نسخه پشتیبان کامل ZIP با موفقیت ایجاد شد (${toPersianDigits(res.stats?.applicationsCount || applications.length)} دکمه، ${toPersianDigits(filesCount)} فایل/آیکون${docMsg}).`);
       await loadBackups();
     } catch (err: any) {
       setError(err.message || 'خطا در ایجاد نسخه پشتیبان ZIP');
@@ -874,7 +898,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     try {
       const updated = await api.updateSettings(settings);
       setSettings(updated);
-      showNotification('تنظیمات ظاهر و داشبورد با موفقیت ذخیره شد');
+      updateFaviconAndTitle(updated.logoUrl, updated.tabTitle || 'پورتال شیراز');
+      showNotification('تنظیمات ظاهر، نام تب و هدر با موفقیت ذخیره شد');
     } catch (err: any) {
       setError(err.message || 'خطا در ذخیره تنظیمات');
     }
@@ -1326,7 +1351,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 { id: 'applications', label: 'برنامه‌ها و دکمه‌ها', icon: AppWindow, count: applications.length },
                 { id: 'categories', label: 'دسته‌بندی‌ها و اولویت', icon: Folder, count: categories.length },
                 { id: 'users', label: 'کاربران و دسترسی‌ها', icon: Users, count: users.length },
-                { id: 'appearance', label: 'ظاهر، والپیپر و لوگو', icon: Palette },
+                { id: 'appearance', label: 'نام تب، هدر و ظاهر', icon: Palette },
                 { id: 'logs', label: 'گزارش وقایع و لاگ‌ها', icon: ScrollText, count: auditLogs.length },
                 { id: 'system', label: 'پشتیبان‌گیری و داکر', icon: SettingsIcon }
               ].map((tab) => {
@@ -2485,9 +2510,215 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             </div>
           )}
 
-          {/* 5. APPEARANCE TAB */}
+          {/* 5. APPEARANCE & BRANDING TAB */}
           {activeTab === 'appearance' && settings && (
             <form onSubmit={handleSaveSettings} className="space-y-6">
+              {/* Top Banner with Quick Save */}
+              <div className="flex flex-col sm:flex-row items-center justify-between gap-4 p-4 rounded-2xl bg-indigo-50/70 dark:bg-indigo-950/40 border border-indigo-200/80 dark:border-indigo-800/60 shadow-xs">
+                <div>
+                  <h3 className="text-sm font-black text-indigo-950 dark:text-indigo-200 flex items-center gap-2">
+                    <Palette className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+                    <span>تنظیمات نام تب مرورگر، عنوان هدر و ظاهر پورتال</span>
+                  </h3>
+                  <p className="text-xs text-indigo-700/80 dark:text-indigo-300/80 mt-0.5">
+                    نام تب مرورگر و متن هدر را به صورت مستقل ویرایش کنید.
+                  </p>
+                </div>
+                <button
+                  type="submit"
+                  className="w-full sm:w-auto px-5 py-2.5 rounded-xl font-bold text-xs bg-indigo-600 hover:bg-indigo-500 text-white shadow-md shadow-indigo-600/30 transition-all duration-200 hover:scale-105 active:scale-95 cursor-pointer flex items-center justify-center gap-2"
+                >
+                  <Save className="w-3.5 h-3.5" />
+                  <span>ذخیره کلیه تغییرات</span>
+                </button>
+              </div>
+
+              {/* Browser Tab Title (Independent from Header) */}
+              <div className="p-5 rounded-2xl bg-white/80 dark:bg-slate-900/80 border border-slate-200 dark:border-white/10 shadow-xs space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 dark:border-white/5 pb-3">
+                  <div>
+                    <h3 className="font-bold text-sm text-slate-900 dark:text-slate-100 flex items-center gap-2">
+                      <Globe className="w-4 h-4 text-blue-500" />
+                      <span>نام و عنوان تب مرورگر (Browser Tab Title)</span>
+                      <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
+                        مستقل از هدر
+                      </span>
+                    </h3>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                      نامی که بالای مرورگر در تب (Tab) نمایش داده می‌شود. با تایپ و ذخیره، نام تب فوراً عوض می‌شود.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
+                      متن عنوان تب مرورگر:
+                    </label>
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={settings.tabTitle ?? ''}
+                        onChange={(e) => {
+                          const newTab = e.target.value;
+                          setSettings({ ...settings, tabTitle: newTab });
+                          // Live update tab in real-time while typing
+                          updateFaviconAndTitle(settings.logoUrl, newTab.trim() || 'پورتال شیراز');
+                        }}
+                        placeholder="پورتال شیراز"
+                        className="flex-1 px-4 py-2.5 rounded-xl text-sm bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-white/10 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-blue-500 focus:outline-none transition-all font-bold"
+                      />
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          if (!settings) return;
+                          try {
+                            const updated = await api.updateSettings(settings);
+                            setSettings(updated);
+                            updateFaviconAndTitle(updated.logoUrl, updated.tabTitle || 'پورتال شیراز');
+                            showNotification('نام تب مرورگر با موفقیت ذخیره و اعمال شد');
+                          } catch (err: any) {
+                            setError(err.message || 'خطا در ذخیره نام تب');
+                          }
+                        }}
+                        className="px-4 py-2.5 rounded-xl text-xs font-bold bg-blue-600 hover:bg-blue-500 text-white shadow-sm transition-all duration-200 hover:scale-105 active:scale-95 cursor-pointer shrink-0"
+                      >
+                        ذخیره نام تب
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Browser Tab Simulation Mockup */}
+                  <div className="p-3 rounded-xl bg-slate-100 dark:bg-slate-950 border border-slate-200 dark:border-slate-800">
+                    <div className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 mb-2">
+                      پیش‌نمایش زنده در نوار تب مرورگر:
+                    </div>
+                    <div className="inline-flex items-center gap-2.5 px-4 py-2 rounded-t-xl bg-white dark:bg-slate-900 border-t border-x border-slate-300 dark:border-slate-700 shadow-xs max-w-full">
+                      {settings.logoUrl ? (
+                        <img
+                          src={settings.logoUrl}
+                          alt="Tab Favicon"
+                          className="w-4 h-4 object-contain shrink-0"
+                        />
+                      ) : (
+                        <div className="w-3.5 h-3.5 rounded-full bg-blue-500 shrink-0" />
+                      )}
+                      <span className="text-xs font-bold text-slate-800 dark:text-slate-200 truncate max-w-[200px]">
+                        {settings.tabTitle?.trim() || 'پورتال شیراز'}
+                      </span>
+                      <span className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 text-xs font-bold mr-2">
+                        ×
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Quick Preset Buttons */}
+                  <div className="flex flex-wrap items-center gap-2 pt-1">
+                    <span className="text-[11px] text-slate-500 dark:text-slate-400">پیش‌فرض‌های سریع:</span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const newTab = 'پورتال شیراز';
+                        setSettings({ ...settings, tabTitle: newTab });
+                        updateFaviconAndTitle(settings.logoUrl, newTab);
+                      }}
+                      className="px-2.5 py-1 rounded-lg text-xs font-medium bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 transition-colors"
+                    >
+                      پورتال شیراز
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const newTab = 'سامانه خدمات پورتال شیراز';
+                        setSettings({ ...settings, tabTitle: newTab });
+                        updateFaviconAndTitle(settings.logoUrl, newTab);
+                      }}
+                      className="px-2.5 py-1 rounded-lg text-xs font-medium bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 transition-colors"
+                    >
+                      سامانه خدمات پورتال شیراز
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const newTab = 'مدیریت منابع انسانی ایران';
+                        setSettings({ ...settings, tabTitle: newTab });
+                        updateFaviconAndTitle(settings.logoUrl, newTab);
+                      }}
+                      className="px-2.5 py-1 rounded-lg text-xs font-medium bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 transition-colors"
+                    >
+                      مدیریت منابع انسانی ایران
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Header Title (Two Lines Stacked) */}
+              <div className="p-5 rounded-2xl bg-white/80 dark:bg-slate-900/80 border border-slate-200 dark:border-white/10 shadow-xs space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 dark:border-white/5 pb-3">
+                  <div>
+                    <h3 className="font-bold text-sm text-slate-900 dark:text-slate-100 flex items-center gap-2">
+                      <LayoutDashboard className="w-4 h-4 text-indigo-500" />
+                      <span>عنوان هدر صفحه اصلی (دو سطری)</span>
+                    </h3>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                      عنوان هدر در دو بخش زیر هم در کنار لوگوی سیستم نمایش داده می‌شود.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
+                      سطر اول هدر (عنوان اصلی)
+                    </label>
+                    <input
+                      type="text"
+                      value={settings.title}
+                      onChange={(e) => setSettings({ ...settings, title: e.target.value })}
+                      placeholder="مثلاً: مدیریت منابع انسانی ایران"
+                      className="w-full px-4 py-2.5 rounded-xl text-sm bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-white/10 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-indigo-500 focus:outline-none transition-all font-bold"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
+                      سطر دوم هدر (دفتر / نمایندگی / زیرعنوان)
+                    </label>
+                    <input
+                      type="text"
+                      value={settings.subtitle || ''}
+                      onChange={(e) => setSettings({ ...settings, subtitle: e.target.value })}
+                      placeholder="مثلاً: دفتر نمایندگی مشهد"
+                      className="w-full px-4 py-2.5 rounded-xl text-sm bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-white/10 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-indigo-500 focus:outline-none transition-all font-medium"
+                    />
+                  </div>
+                </div>
+
+                {/* Live Font-Size & Style Preview */}
+                <div className="p-4 rounded-xl bg-slate-100/70 dark:bg-slate-950/60 border border-slate-200/80 dark:border-white/5 flex items-center justify-between gap-4">
+                  <span className="text-[11px] text-slate-500 font-medium shrink-0">پیش‌نمایش در هدر:</span>
+                  <div className="flex items-center gap-3">
+                    {settings.logoUrl && (
+                      <img
+                        src={settings.logoUrl}
+                        alt="Logo"
+                        className="h-9 w-auto max-w-[80px] object-contain"
+                      />
+                    )}
+                    <div className="text-right flex flex-col justify-center">
+                      <span className="text-sm sm:text-base font-black tracking-tight text-slate-900 dark:text-white leading-snug">
+                        {settings.title?.trim() || 'مدیریت منابع انسانی ایران'}
+                      </span>
+                      {settings.subtitle?.trim() && (
+                        <span className="text-xs font-bold text-slate-600 dark:text-slate-400 leading-tight mt-0.5">
+                          {settings.subtitle.trim()}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
               {/* Logo Management */}
               <div className="p-5 rounded-2xl bg-white/80 dark:bg-slate-900/80 border border-slate-200 dark:border-white/10 shadow-xs space-y-4">
                 <div>
@@ -2893,38 +3124,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 </div>
               </div>
 
-              {/* Title & Subtitle */}
-              <div className="p-5 rounded-2xl bg-white/80 dark:bg-slate-900/80 border border-slate-200 dark:border-white/10 shadow-xs space-y-4">
-                <h3 className="font-bold text-sm text-slate-900 dark:text-slate-100">عنوان و نام‌گذاری سرور</h3>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                      عنوان
-                    </label>
-                    <input
-                      type="text"
-                      value={settings.title}
-                      onChange={(e) => setSettings({ ...settings, title: e.target.value })}
-                      placeholder="مثال: مدیریت تدارکات شیراز"
-                      className="w-full px-3 py-2 rounded-xl text-xs bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-white/10 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-indigo-500 focus:outline-none transition-all"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                      زیرعنوان
-                    </label>
-                    <input
-                      type="text"
-                      value={settings.subtitle}
-                      onChange={(e) => setSettings({ ...settings, subtitle: e.target.value })}
-                      placeholder="مثال: دفتر شیراز"
-                      className="w-full px-3 py-2 rounded-xl text-xs bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-white/10 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-indigo-500 focus:outline-none transition-all"
-                    />
-                  </div>
-                </div>
-              </div>
-
               {/* Clock & Layout */}
               <div className="p-5 rounded-2xl bg-white/80 dark:bg-slate-900/80 border border-slate-200 dark:border-white/10 shadow-xs space-y-4">
                 <h3 className="font-bold text-sm text-slate-900 dark:text-slate-100">تنظیمات ساعت و چیدمان ستون‌ها</h3>
@@ -3306,66 +3505,194 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     </div>
                   ) : (
                     <div className="divide-y divide-slate-200/70 dark:divide-slate-800/70">
-                      {backups.map((b) => (
-                        <div
-                          key={b.filename}
-                          className="p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-white dark:hover:bg-slate-900/80 transition-colors"
-                        >
-                          <div className="space-y-1">
-                            <div className="flex flex-wrap items-center gap-2">
-                              <span className="font-mono text-xs font-bold text-slate-800 dark:text-slate-200" dir="ltr">
-                                {b.filename}
-                              </span>
-                              <span className="px-2 py-0.5 rounded-md bg-slate-200 dark:bg-slate-800 text-[10px] font-mono text-slate-600 dark:text-slate-300" dir="ltr">
-                                {formatBytes(b.size)}
-                              </span>
+                      {backups.map((b) => {
+                        const stats = b.stats || {} as any;
+                        const appsCount = stats.applicationsCount ?? stats.appsCount ?? 0;
+                        const catsCount = stats.categoriesCount ?? 0;
+                        const usersCount = stats.usersCount ?? 0;
+                        const uploadsCount = stats.uploadsCount ?? 0;
+                        const buttonFilesCount = stats.buttonFilesCount ?? 0;
+                        const buttonIconsCount = stats.buttonIconsCount ?? 0;
+                        const hpTitle = stats.homepageTitle || 'Linux Services Hub';
+                        const hpSubtitle = stats.subtitle || stats.homepageSubtitle;
+                        const hasLogo = stats.hasCustomLogo;
+                        const hasBg = stats.hasCustomBackground;
+                        const bgCount = stats.uploadedBackgroundsCount ?? 0;
+
+                        return (
+                          <div
+                            key={b.filename}
+                            className="p-4 flex flex-col gap-3 hover:bg-white/90 dark:hover:bg-slate-900/90 transition-colors"
+                          >
+                            {/* File Header & Actions */}
+                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                              <div className="flex items-center gap-2.5">
+                                <div className="w-8 h-8 rounded-xl bg-purple-500/10 text-purple-600 dark:text-purple-400 flex items-center justify-center shrink-0 border border-purple-500/20">
+                                  <FileArchive className="w-4 h-4" />
+                                </div>
+                                <div>
+                                  <div className="flex flex-wrap items-center gap-2">
+                                    <span className="font-mono text-xs font-bold text-slate-900 dark:text-slate-100" dir="ltr">
+                                      {b.filename}
+                                    </span>
+                                    <span className="px-2 py-0.5 rounded-md bg-purple-100 dark:bg-purple-950 text-[10px] font-mono font-bold text-purple-700 dark:text-purple-300 border border-purple-200/60 dark:border-purple-800/60" dir="ltr">
+                                      {formatBytes(b.size)}
+                                    </span>
+                                  </div>
+                                  <p className="text-[11px] text-slate-400 mt-0.5">
+                                    زمان ایجاد: <span className="font-medium text-slate-600 dark:text-slate-300">{formatPersianDate(b.createdAt)}</span>
+                                  </p>
+                                </div>
+                              </div>
+
+                              <div className="flex items-center gap-2 shrink-0 self-end sm:self-center">
+                                <button
+                                  type="button"
+                                  onClick={() => handleInspectBackup(b.filename)}
+                                  disabled={isLoadingInspection === b.filename}
+                                  className="px-3 py-1.5 rounded-xl text-xs font-semibold bg-blue-50 hover:bg-blue-100 dark:bg-blue-950/40 dark:hover:bg-blue-900/60 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800 flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50 shadow-2xs"
+                                  title="مشاهده محتویات و لیست فایل‌های موجود در این نسخه"
+                                >
+                                  <Eye className={`w-3.5 h-3.5 ${isLoadingInspection === b.filename ? 'animate-spin' : ''}`} />
+                                  <span>{isLoadingInspection === b.filename ? 'در حال بررسی...' : 'مشاهده فایل‌ها'}</span>
+                                </button>
+
+                                <a
+                                  href={api.getBackupDownloadUrl(b.filename)}
+                                  download={b.filename}
+                                  className="px-3 py-1.5 rounded-xl text-xs font-semibold bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 flex items-center gap-1.5 transition-colors cursor-pointer shadow-2xs"
+                                  title="دانلود مستقیم فایل ZIP"
+                                >
+                                  <Download className="w-3.5 h-3.5 text-blue-500" />
+                                  <span>دانلود</span>
+                                </a>
+
+                                <button
+                                  onClick={() => handleRestoreZipBackup(b.filename)}
+                                  disabled={isRestoringBackup === b.filename}
+                                  className="px-3 py-1.5 rounded-xl text-xs font-semibold bg-amber-50 hover:bg-amber-100 dark:bg-amber-950/40 dark:hover:bg-amber-900/60 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800 flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50"
+                                  title="بازیابی این نسخه"
+                                >
+                                  <RefreshCw className={`w-3.5 h-3.5 ${isRestoringBackup === b.filename ? 'animate-spin' : ''}`} />
+                                  <span>{isRestoringBackup === b.filename ? 'در حال بازیابی...' : 'بازیابی'}</span>
+                                </button>
+
+                                <button
+                                  onClick={() => handleDeleteZipBackup(b.filename)}
+                                  className="p-1.5 rounded-xl text-red-500 hover:bg-red-50 dark:hover:bg-red-950/40 transition-colors cursor-pointer"
+                                  title="حذف نسخه پشتیبان"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              </div>
                             </div>
 
-                            <div className="flex flex-wrap items-center gap-3 text-[11px] text-slate-500 dark:text-slate-400">
-                              <span>تاریخ ثبت: <span className="font-medium text-slate-700 dark:text-slate-300">{formatPersianDate(b.createdAt)}</span></span>
-                              <span>·</span>
-                              {b.stats && (
-                                <span className="flex items-center gap-2">
-                                  <span>برنامه‌ها: <b className="text-blue-600 dark:text-blue-400">{toPersianDigits(b.stats.appsCount)}</b></span>
-                                  <span>دسته‌ها: <b className="text-purple-600 dark:text-purple-400">{toPersianDigits(b.stats.categoriesCount)}</b></span>
-                                  <span>کاربران: <b className="text-emerald-600 dark:text-emerald-400">{toPersianDigits(b.stats.usersCount)}</b></span>
-                                  <span>فایل‌ها: <b className="text-amber-600 dark:text-amber-400">{toPersianDigits(b.stats.uploadsCount)}</b></span>
+                            {/* Detailed Statistics Box Directly Under the ZIP file */}
+                            <div className="mt-1 p-3 rounded-xl bg-slate-100/80 dark:bg-slate-900/90 border border-slate-200/80 dark:border-slate-800 space-y-2.5">
+                              <div className="flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400 font-medium">
+                                <span className="flex items-center gap-1.5 font-bold text-slate-700 dark:text-slate-200">
+                                  <PackageCheck className="w-3.5 h-3.5 text-purple-500" />
+                                  <span>آمار محتوای بسته‌بندی‌شده در این فایل زیپ:</span>
                                 </span>
-                              )}
+                                <span className="text-[10px] text-purple-600 dark:text-purple-400 font-mono">
+                                  جامع و آماده بازیابی ۱۰۰٪
+                                </span>
+                              </div>
+
+                              {/* Badges Grid */}
+                              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 text-xs">
+                                <div className="p-2 rounded-lg bg-white dark:bg-slate-950 border border-slate-200/70 dark:border-slate-800 flex flex-col">
+                                  <span className="text-[10px] text-slate-400">دکمه‌ها / برنامه‌ها:</span>
+                                  <span className="font-bold text-blue-600 dark:text-blue-400 font-mono text-sm">
+                                    {toPersianDigits(appsCount)} مورد
+                                  </span>
+                                </div>
+
+                                <div className="p-2 rounded-lg bg-white dark:bg-slate-950 border border-slate-200/70 dark:border-slate-800 flex flex-col">
+                                  <span className="text-[10px] text-slate-400">دسته‌بندی‌ها:</span>
+                                  <span className="font-bold text-purple-600 dark:text-purple-400 font-mono text-sm">
+                                    {toPersianDigits(catsCount)} دسته
+                                  </span>
+                                </div>
+
+                                <div className="p-2 rounded-lg bg-white dark:bg-slate-950 border border-slate-200/70 dark:border-slate-800 flex flex-col">
+                                  <span className="text-[10px] text-slate-400">اسناد پیوست دکمه‌ها:</span>
+                                  <span className="font-bold text-emerald-600 dark:text-emerald-400 font-mono text-sm">
+                                    {toPersianDigits(buttonFilesCount)} سند
+                                  </span>
+                                </div>
+
+                                <div className="p-2 rounded-lg bg-white dark:bg-slate-950 border border-slate-200/70 dark:border-slate-800 flex flex-col">
+                                  <span className="text-[10px] text-slate-400">عکس‌ها و آیکون‌های دکمه:</span>
+                                  <span className="font-bold text-amber-600 dark:text-amber-400 font-mono text-sm">
+                                    {toPersianDigits(buttonIconsCount)} آیکون
+                                  </span>
+                                </div>
+
+                                <div className="p-2 rounded-lg bg-white dark:bg-slate-950 border border-slate-200/70 dark:border-slate-800 flex flex-col">
+                                  <span className="text-[10px] text-slate-400">کل فایل‌ها و مدیا:</span>
+                                  <span className="font-bold text-indigo-600 dark:text-indigo-400 font-mono text-sm">
+                                    {toPersianDigits(uploadsCount)} فایل
+                                  </span>
+                                </div>
+
+                                <div className="p-2 rounded-lg bg-white dark:bg-slate-950 border border-slate-200/70 dark:border-slate-800 flex flex-col">
+                                  <span className="text-[10px] text-slate-400">حساب‌های کاربری:</span>
+                                  <span className="font-bold text-slate-700 dark:text-slate-300 font-mono text-sm">
+                                    {toPersianDigits(usersCount)} کاربر
+                                  </span>
+                                </div>
+                              </div>
+
+                              {/* Customization Details Row */}
+                              <div className="pt-1.5 border-t border-slate-200/60 dark:border-slate-800/60 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-[11px] text-slate-600 dark:text-slate-400">
+                                <div className="flex items-center gap-1.5">
+                                  <span className="text-slate-400">عنوان صفحه اول:</span>
+                                  <span className="font-bold text-slate-800 dark:text-slate-200 bg-white dark:bg-slate-950 px-2 py-0.5 rounded border border-slate-200/60 dark:border-slate-800">
+                                    {hpTitle}
+                                  </span>
+                                </div>
+
+                                {hpSubtitle && (
+                                  <div className="flex items-center gap-1.5">
+                                    <span className="text-slate-400">زیرعنوان:</span>
+                                    <span className="text-slate-700 dark:text-slate-300 bg-white dark:bg-slate-950 px-2 py-0.5 rounded border border-slate-200/60 dark:border-slate-800">
+                                      {hpSubtitle}
+                                    </span>
+                                  </div>
+                                )}
+
+                                <div className="flex items-center gap-1">
+                                  <span className="text-slate-400">لوگوی صفحه اول:</span>
+                                  <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                                    hasLogo
+                                      ? 'bg-emerald-50 dark:bg-emerald-950 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800'
+                                      : 'bg-slate-200/70 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
+                                  }`}>
+                                    {hasLogo ? '✓ لوگوی اختصاصی آپلودشده موجود است' : 'لوگوی پیش‌فرض سیستم'}
+                                  </span>
+                                </div>
+
+                                <div className="flex items-center gap-1">
+                                  <span className="text-slate-400">والپیپر/پس‌زمینه:</span>
+                                  <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                                    hasBg
+                                      ? 'bg-blue-50 dark:bg-blue-950 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-800'
+                                      : 'bg-slate-200/70 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
+                                  }`}>
+                                    {hasBg ? '✓ والپیپر اختصاصی فعال' : 'بدون والپیپر'}
+                                  </span>
+                                  {bgCount > 0 && (
+                                    <span className="text-[10px] text-slate-400">
+                                      ({toPersianDigits(bgCount)} تصویر در گالری)
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
                             </div>
                           </div>
-
-                          <div className="flex items-center gap-2 shrink-0">
-                            <a
-                              href={api.getBackupDownloadUrl(b.filename)}
-                              download={b.filename}
-                              className="px-3 py-1.5 rounded-xl text-xs font-semibold bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 flex items-center gap-1.5 transition-colors cursor-pointer"
-                              title="دانلود فایل ZIP"
-                            >
-                              <Download className="w-3.5 h-3.5 text-blue-500" />
-                              <span>دانلود</span>
-                            </a>
-
-                            <button
-                              onClick={() => handleRestoreZipBackup(b.filename)}
-                              disabled={isRestoringBackup === b.filename}
-                              className="px-3 py-1.5 rounded-xl text-xs font-semibold bg-amber-50 hover:bg-amber-100 dark:bg-amber-950/40 dark:hover:bg-amber-900/60 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800 flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50"
-                              title="بازیابی این نسخه"
-                            >
-                              <RefreshCw className={`w-3.5 h-3.5 ${isRestoringBackup === b.filename ? 'animate-spin' : ''}`} />
-                              <span>{isRestoringBackup === b.filename ? 'در حال بازیابی...' : 'بازیابی'}</span>
-                            </button>
-
-                            <button
-                              onClick={() => handleDeleteZipBackup(b.filename)}
-                              className="p-1.5 rounded-xl text-red-500 hover:bg-red-50 dark:hover:bg-red-950/40 transition-colors cursor-pointer"
-                              title="حذف نسخه پشتیبان"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                          </div>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   )}
                 </div>
@@ -4207,9 +4534,11 @@ echo "DATA_DIR=/opt/homelab-data" >> .env
                 <input
                   type="text"
                   required
+                  dir="ltr"
                   value={editingUser.username || ''}
                   onChange={(e) => setEditingUser({ ...editingUser, username: e.target.value })}
-                  className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                  placeholder="admin"
+                  className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 focus:ring-2 focus:ring-blue-500 focus:outline-none text-left font-mono tracking-wide"
                 />
               </div>
 
@@ -4220,10 +4549,11 @@ echo "DATA_DIR=/opt/homelab-data" >> .env
                 <input
                   type="password"
                   required={!editingUser.id}
+                  dir="ltr"
                   value={editingUser.password || ''}
                   onChange={(e) => setEditingUser({ ...editingUser, password: e.target.value })}
-                  placeholder="حداقل ۶ کاراکتر"
-                  className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                  placeholder={editingUser.id ? '••••••••' : 'حداقل ۶ کاراکتر'}
+                  className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 focus:ring-2 focus:ring-blue-500 focus:outline-none text-left font-mono tracking-wide"
                 />
               </div>
 
@@ -4664,6 +4994,294 @@ echo "DATA_DIR=/opt/homelab-data" >> .env
                     <span>تأیید و پاک‌سازی کامل داده‌ها</span>
                   </>
                 )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Backup Inspection Modal */}
+      {inspectingBackup && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in" dir="rtl">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl shadow-2xl max-w-3xl w-full max-h-[90vh] flex flex-col overflow-hidden animate-scale-up">
+            {/* Header */}
+            <div className="p-5 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between bg-slate-50/50 dark:bg-slate-950/40">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-blue-500/10 text-blue-600 dark:text-blue-400 flex items-center justify-center">
+                  <Archive className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-slate-900 dark:text-white text-base">
+                    محتویات و فایل‌های نسخه پشتیبان ZIP
+                  </h3>
+                  <div className="flex items-center gap-2 mt-0.5">
+                    <span className="font-mono text-xs text-slate-500 dark:text-slate-400" dir="ltr">
+                      {inspectingBackup.filename}
+                    </span>
+                    <span className="text-[10px] text-slate-400">·</span>
+                    <span className="text-xs text-slate-500 dark:text-slate-400">
+                      {formatBytes(inspectingBackup.sizeBytes)}
+                    </span>
+                  </div>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setInspectingBackup(null)}
+                className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-colors cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Quick Stats Grid */}
+            <div className="p-4 border-b border-slate-100 dark:border-slate-800 bg-slate-50/30 dark:bg-slate-950/20 space-y-2.5">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                <div className="p-3 rounded-2xl bg-white dark:bg-slate-800/80 border border-slate-200/70 dark:border-slate-700/60 flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-xl bg-blue-500/10 text-blue-600 dark:text-blue-400 flex items-center justify-center shrink-0">
+                    <AppWindow className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">کل برنامه‌ها</p>
+                    <p className="text-base font-bold text-slate-800 dark:text-slate-100">
+                      {toPersianDigits(inspectingBackup.stats.applicationsCount)}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="p-3 rounded-2xl bg-white dark:bg-slate-800/80 border border-slate-200/70 dark:border-slate-700/60 flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0">
+                    <FileText className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">اسناد پیوست دکمه‌ها</p>
+                    <p className="text-base font-bold text-emerald-600 dark:text-emerald-400">
+                      {toPersianDigits(inspectingBackup.stats.buttonFilesCount || inspectingBackup.files.filter(f => f.zipPath.startsWith('button-documents/') || f.role.includes('سند')).length)}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="p-3 rounded-2xl bg-white dark:bg-slate-800/80 border border-slate-200/70 dark:border-slate-700/60 flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-xl bg-amber-500/10 text-amber-600 dark:text-amber-400 flex items-center justify-center shrink-0">
+                    <FolderArchive className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">فایل‌ها و آیکون‌ها</p>
+                    <p className="text-base font-bold text-slate-800 dark:text-slate-100">
+                      {toPersianDigits(inspectingBackup.stats.uploadsCount)}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="p-3 rounded-2xl bg-white dark:bg-slate-800/80 border border-slate-200/70 dark:border-slate-700/60 flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-xl bg-purple-500/10 text-purple-600 dark:text-purple-400 flex items-center justify-center shrink-0">
+                    <FileSpreadsheet className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">اکسل و داده JSON</p>
+                    <p className="text-xs font-bold text-purple-600 dark:text-purple-400">
+                      کامل و آماده
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Homepage Personalization Details in Modal */}
+              <div className="p-2.5 rounded-xl bg-white/70 dark:bg-slate-900/70 border border-slate-200/60 dark:border-slate-800 flex flex-wrap items-center justify-between gap-2 text-xs">
+                <div className="flex flex-wrap items-center gap-3 text-[11px]">
+                  <span>عنوان پورتال: <b className="text-slate-800 dark:text-slate-200">{inspectingBackup.stats.homepageTitle || 'Linux Services Hub'}</b></span>
+                  {inspectingBackup.stats.homepageSubtitle && (
+                    <span>زیرعنوان: <b className="text-slate-700 dark:text-slate-300">{inspectingBackup.stats.homepageSubtitle}</b></span>
+                  )}
+                  <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                    inspectingBackup.stats.hasCustomLogo
+                      ? 'bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300'
+                      : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
+                  }`}>
+                    {inspectingBackup.stats.hasCustomLogo ? '✓ شامل لوگوی اختصاصی' : 'لوگوی استاندارد'}
+                  </span>
+                  <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                    inspectingBackup.stats.hasCustomBackground
+                      ? 'bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300'
+                      : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
+                  }`}>
+                    {inspectingBackup.stats.hasCustomBackground ? '✓ شامل والپیپر اختصاصی' : 'پوسته رنگی'}
+                  </span>
+                </div>
+                <span className="text-[10px] text-slate-400 font-mono">
+                  نسخه پکیج: ۲.۲.۰
+                </span>
+              </div>
+            </div>
+
+            {/* Filter and Search Bar */}
+            <div className="p-3.5 border-b border-slate-100 dark:border-slate-800 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+              <div className="flex items-center gap-1.5 p-1 rounded-xl bg-slate-100 dark:bg-slate-800/70 text-xs">
+                <button
+                  type="button"
+                  onClick={() => setInspectionFilter('all')}
+                  className={`px-3 py-1.5 rounded-lg font-bold transition-all cursor-pointer ${
+                    inspectionFilter === 'all'
+                      ? 'bg-white dark:bg-slate-900 text-blue-600 dark:text-blue-400 shadow-2xs'
+                      : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
+                  }`}
+                >
+                  همه فایل‌ها ({toPersianDigits(inspectingBackup.files.length)})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setInspectionFilter('documents')}
+                  className={`px-3 py-1.5 rounded-lg font-bold transition-all cursor-pointer ${
+                    inspectionFilter === 'documents'
+                      ? 'bg-white dark:bg-slate-900 text-emerald-600 dark:text-emerald-400 shadow-2xs'
+                      : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
+                  }`}
+                >
+                  اسناد پیوست دکمه‌ها
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setInspectionFilter('icons')}
+                  className={`px-3 py-1.5 rounded-lg font-bold transition-all cursor-pointer ${
+                    inspectionFilter === 'icons'
+                      ? 'bg-white dark:bg-slate-900 text-amber-600 dark:text-amber-400 shadow-2xs'
+                      : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
+                  }`}
+                >
+                  آیکون‌ها و تصاویر
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setInspectionFilter('data')}
+                  className={`px-3 py-1.5 rounded-lg font-bold transition-all cursor-pointer ${
+                    inspectionFilter === 'data'
+                      ? 'bg-white dark:bg-slate-900 text-purple-600 dark:text-purple-400 shadow-2xs'
+                      : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
+                  }`}
+                >
+                  پایگاه داده و اکسل
+                </button>
+              </div>
+
+              <div className="relative flex-1 sm:max-w-xs">
+                <Search className="w-4 h-4 text-slate-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                <input
+                  type="text"
+                  placeholder="جستجو در فایل‌های این نسخه..."
+                  value={inspectionSearch}
+                  onChange={(e) => setInspectionSearch(e.target.value)}
+                  className="w-full pr-9 pl-3 py-1.5 text-xs rounded-xl bg-slate-100 dark:bg-slate-800 border-none text-slate-800 dark:text-slate-200 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+            </div>
+
+            {/* Files List */}
+            <div className="flex-1 overflow-y-auto p-4 space-y-2 divide-y divide-slate-100 dark:divide-slate-800/60">
+              {inspectingBackup.files
+                .filter((file) => {
+                  if (inspectionFilter === 'documents') {
+                    return file.zipPath.startsWith('button-documents/') || file.role.includes('سند') || file.name.startsWith('doc-');
+                  }
+                  if (inspectionFilter === 'icons') {
+                    return file.zipPath.startsWith('button-icons/') || file.zipPath.startsWith('uploads/icons/') || file.name.startsWith('icon-') || file.name.endsWith('.png') || file.name.endsWith('.jpg') || file.name.endsWith('.svg');
+                  }
+                  if (inspectionFilter === 'data') {
+                    return file.zipPath.endsWith('.json') || file.zipPath.endsWith('.xlsx');
+                  }
+                  return true;
+                })
+                .filter((file) => {
+                  if (!inspectionSearch.trim()) return true;
+                  const q = inspectionSearch.toLowerCase();
+                  return (
+                    file.name.toLowerCase().includes(q) ||
+                    file.zipPath.toLowerCase().includes(q) ||
+                    file.role.toLowerCase().includes(q) ||
+                    (file.appName && file.appName.toLowerCase().includes(q))
+                  );
+                })
+                .map((file, idx) => {
+                  const isButtonDoc = file.zipPath.startsWith('button-documents/') || file.role.includes('سند');
+                  const isIcon = file.zipPath.startsWith('button-icons/') || file.zipPath.startsWith('uploads/icons/') || file.name.startsWith('icon-');
+                  const isXlsx = file.zipPath.endsWith('.xlsx');
+
+                  return (
+                    <div
+                      key={`${file.zipPath}-${idx}`}
+                      className="pt-2.5 pb-1 flex items-center justify-between gap-3 hover:bg-slate-50 dark:hover:bg-slate-800/40 px-2 rounded-xl transition-colors"
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 ${
+                          isButtonDoc
+                            ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400'
+                            : isIcon
+                            ? 'bg-amber-500/15 text-amber-600 dark:text-amber-400'
+                            : isXlsx
+                            ? 'bg-emerald-600/15 text-emerald-700 dark:text-emerald-300'
+                            : 'bg-blue-500/15 text-blue-600 dark:text-blue-400'
+                        }`}>
+                          {isButtonDoc ? (
+                            <FileText className="w-4 h-4" />
+                          ) : isIcon ? (
+                            <ImageIcon className="w-4 h-4" />
+                          ) : isXlsx ? (
+                            <FileSpreadsheet className="w-4 h-4" />
+                          ) : (
+                            <FileCode2 className="w-4 h-4" />
+                          )}
+                        </div>
+
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-bold text-slate-800 dark:text-slate-100 truncate" dir="auto">
+                              {file.name}
+                            </span>
+                            {file.appName && (
+                              <span className="text-[10px] px-2 py-0.5 rounded-md bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 font-bold border border-blue-200/50">
+                                برای دکمه «{file.appName}»
+                              </span>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-2 mt-0.5">
+                            <span className="text-[10px] font-mono text-slate-500 dark:text-slate-400 truncate" dir="ltr">
+                              {file.zipPath}
+                            </span>
+                            <span className="text-slate-300 dark:text-slate-700">·</span>
+                            <span className="text-[10px] text-slate-500 dark:text-slate-400">
+                              {file.role}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2 shrink-0">
+                        <span className="text-[11px] font-mono font-medium text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-md" dir="ltr">
+                          {formatBytes(file.sizeBytes)}
+                        </span>
+                        <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" title="موجود در بسته پشتیبان" />
+                      </div>
+                    </div>
+                  );
+                })}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-4 border-t border-slate-100 dark:border-slate-800 flex justify-between items-center bg-slate-50/50 dark:bg-slate-950/30">
+              <a
+                href={api.getBackupDownloadUrl(inspectingBackup.filename)}
+                download={inspectingBackup.filename}
+                className="px-4 py-2 rounded-xl text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white shadow-md shadow-blue-600/30 flex items-center gap-2 transition-colors cursor-pointer"
+              >
+                <Download className="w-4 h-4" />
+                <span>دانلود مستقیم فایل ZIP ({formatBytes(inspectingBackup.sizeBytes)})</span>
+              </a>
+
+              <button
+                type="button"
+                onClick={() => setInspectingBackup(null)}
+                className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 dark:text-slate-400 hover:bg-slate-200/70 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+              >
+                بستن پنجره
               </button>
             </div>
           </div>
