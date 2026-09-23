@@ -1,58 +1,66 @@
-# syntax=docker/dockerfile:1
-# Multi-stage Dockerfile for Homelab Portal (LinxDash)
+# ==============================================================================
+# Multi-Stage Production Dockerfile for Portal Shiraz / Homelab Dashboard
+# Optimized for minimal image size, security, and fast build times
+# ==============================================================================
 
-# Stage 1: Build Frontend and Bundle Server
+# Stage 1: Build Frontend and Server Bundle
 FROM node:22-alpine AS builder
 
 WORKDIR /app
 
-# Install dependencies needed for compilation
-COPY package*.json ./
-RUN npm ci
+# Install system dependencies if required for build
+RUN apk add --no-cache libc6-compat
 
-# Copy source files and build
+# Copy package manifests first for efficient layer caching
+COPY package.json package-lock.json* ./
+
+# Install all dependencies (including devDependencies needed for Vite & TypeScript build)
+RUN npm install
+
+# Copy source code and configuration files
 COPY . .
+
+# Build Vite frontend assets and bundle the Express production server
 RUN npm run build
 
-# Stage 2: Production Minimal Runner
-FROM node:22-alpine AS runner
+# Prune devDependencies to keep runtime dependencies lean
+RUN npm prune --omit=dev
 
-LABEL org.opencontainers.image.title="Homelab Dashboard & Service Launcher"
-LABEL org.opencontainers.image.description="Modern, lightweight, privacy-focused dashboard and service launcher for homelabs"
-LABEL org.opencontainers.image.licenses="MIT"
+# ==============================================================================
+# Stage 2: Minimal Production Runtime
+# ==============================================================================
+FROM node:22-alpine AS runner
 
 WORKDIR /app
 
-ENV NODE_ENV=production
-ENV PORT=3000
-ENV DATA_DIR=/app/data
+# Set production environment variables
+ENV NODE_ENV=production \
+    PORT=4500 \
+    DATA_DIR=/app/data
 
-# Install production dependencies only
-COPY package*.json ./
-RUN npm ci --omit=dev && npm cache clean --force
+# Install curl/wget for healthcheck
+RUN apk add --no-cache wget
 
-# Copy compiled frontend assets & bundled server from builder stage
-COPY --from=builder /app/dist ./dist
+# Create application data and uploads directories
+RUN mkdir -p /app/data /app/data/uploads /app/data/backups
+
+# Copy production dependencies and bundle from builder stage
+COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/package.json ./package.json
+COPY --from=builder /app/dist ./dist
 
-# Pre-create data directories and assign ownership to non-root 'node' user
-RUN mkdir -p /app/data /app/data/uploads /app/data/backups && \
-    chown -R node:node /app
+# Optional: Ensure non-root ownership if required, keeping data dir writeable
+RUN chown -R node:node /app
 
-# Declare persistent volume so data survives container deletion and image upgrades
-VOLUME ["/app/data"]
+# Expose default HTTP port
+EXPOSE 4500
 
-# Switch to non-root user for container security
+# Container healthcheck ensuring server responds on /api/public/config
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+  CMD wget -q --spider http://127.0.0.1:4500/api/public/config || exit 1
+
+# Switch to standard non-root node user
 USER node
 
-# Expose web service port
-EXPOSE 3000
-
-# Container Healthcheck
-HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-  CMD wget --no-verbose --tries=1 --spider http://localhost:3000/api/health || exit 1
-
-# Start the application directly with Node for proper SIGTERM/SIGINT signal handling
+# Run the standalone bundled Express server
 CMD ["node", "dist/server.cjs"]
-
-

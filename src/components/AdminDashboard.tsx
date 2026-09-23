@@ -52,7 +52,9 @@ import {
   FileJson,
   AlertTriangle,
   RotateCcw,
-  Save
+  Save,
+  Sun,
+  Moon
 } from 'lucide-react';
 import {
   Application,
@@ -216,6 +218,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const excelImportRef = useRef<HTMLInputElement>(null);
   const jsonImportRef = useRef<HTMLInputElement>(null);
   const zipBackupInputRef = useRef<HTMLInputElement>(null);
+  const [headerPreviewTheme, setHeaderPreviewTheme] = useState<'light' | 'dark'>('light');
   const [importPreview, setImportPreview] = useState<{
     fileType: 'excel' | 'json';
     fileName: string;
@@ -2652,8 +2655,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 </div>
               </div>
 
-              {/* Header Title (Two Lines Stacked) */}
-              <div className="p-5 rounded-2xl bg-white/80 dark:bg-slate-900/80 border border-slate-200 dark:border-white/10 shadow-xs space-y-4">
+              {/* Header Title (Two Lines Stacked) & Live Header Preview */}
+              <div className="p-5 rounded-2xl bg-white/80 dark:bg-slate-900/80 border border-slate-200 dark:border-white/10 shadow-xs space-y-5">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 dark:border-white/5 pb-3">
                   <div>
                     <h3 className="font-bold text-sm text-slate-900 dark:text-slate-100 flex items-center gap-2">
@@ -2661,7 +2664,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       <span>عنوان هدر صفحه اصلی (دو سطری)</span>
                     </h3>
                     <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                      عنوان هدر در دو بخش زیر هم در کنار لوگوی سیستم نمایش داده می‌شود.
+                      عنوان هدر در دو سطر زیر هم در کنار لوگوی سیستم در نوار بالای صفحه اصلی نمایش داده می‌شود.
                     </p>
                   </div>
                 </div>
@@ -2694,26 +2697,157 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   </div>
                 </div>
 
-                {/* Live Font-Size & Style Preview */}
-                <div className="p-4 rounded-xl bg-slate-100/70 dark:bg-slate-950/60 border border-slate-200/80 dark:border-white/5 flex items-center justify-between gap-4">
-                  <span className="text-[11px] text-slate-500 font-medium shrink-0">پیش‌نمایش در هدر:</span>
-                  <div className="flex items-center gap-3">
-                    {settings.logoUrl && (
-                      <img
-                        src={settings.logoUrl}
-                        alt="Logo"
-                        className="h-9 w-auto max-w-[80px] object-contain"
-                      />
-                    )}
-                    <div className="text-right flex flex-col justify-center">
-                      <span className="text-sm sm:text-base font-black tracking-tight text-slate-900 dark:text-white leading-snug">
-                        {settings.title?.trim() || 'مدیریت منابع انسانی ایران'}
+                {/* REAL-TIME LIVE HEADER PREVIEW (PIXEL-PERFECT MOCKUP) */}
+                <div className="rounded-2xl border border-indigo-200/80 dark:border-indigo-900/50 bg-gradient-to-b from-indigo-50/40 to-slate-50/40 dark:from-indigo-950/20 dark:to-slate-950/40 p-4 sm:p-5 space-y-3 shadow-inner">
+                  {/* Preview Toolbar */}
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 dark:text-emerald-400 text-[11px] font-bold">
+                        <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                        <span>پیش‌نمایش زنده و بلادرنگ هدر</span>
+                      </div>
+                      <span className="text-xs text-slate-500 dark:text-slate-400 hidden sm:inline">
+                        (همگام با تایپ عنوان و آپلود لوگو)
                       </span>
-                      {settings.subtitle?.trim() && (
-                        <span className="text-xs font-bold text-slate-600 dark:text-slate-400 leading-tight mt-0.5">
-                          {settings.subtitle.trim()}
-                        </span>
-                      )}
+                    </div>
+
+                    {/* Light/Dark Preview Mode Switcher */}
+                    <div className="flex items-center gap-1 bg-white dark:bg-slate-900 p-1 rounded-xl border border-slate-200 dark:border-white/10 shadow-xs">
+                      <button
+                        type="button"
+                        onClick={() => setHeaderPreviewTheme('light')}
+                        className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                          headerPreviewTheme === 'light'
+                            ? 'bg-amber-100/90 text-amber-800 shadow-xs font-bold'
+                            : 'text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200'
+                        }`}
+                        title="مشاهده پیش‌نمایش در حالت تم روشن"
+                      >
+                        <Sun className="w-3.5 h-3.5 text-amber-500" />
+                        <span>تم روز</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setHeaderPreviewTheme('dark')}
+                        className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                          headerPreviewTheme === 'dark'
+                            ? 'bg-indigo-900/80 text-indigo-200 shadow-xs font-bold'
+                            : 'text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200'
+                        }`}
+                        title="مشاهده پیش‌نمایش در حالت تم تاریک"
+                      >
+                        <Moon className="w-3.5 h-3.5 text-indigo-400" />
+                        <span>تم شب</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Browser Mockup Window */}
+                  <div className="rounded-xl overflow-hidden border border-slate-300 dark:border-slate-700/80 shadow-md">
+                    {/* Window Title Bar */}
+                    <div className="px-3.5 py-2 bg-slate-200/90 dark:bg-slate-800/90 border-b border-slate-300/80 dark:border-slate-700/80 flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-1.5">
+                        <div className="w-2.5 h-2.5 rounded-full bg-rose-400/90" />
+                        <div className="w-2.5 h-2.5 rounded-full bg-amber-400/90" />
+                        <div className="w-2.5 h-2.5 rounded-full bg-emerald-400/90" />
+                      </div>
+                      <div className="px-4 py-0.5 rounded-md bg-white/70 dark:bg-slate-900/70 border border-slate-300/60 dark:border-slate-700/60 text-[10px] text-slate-500 dark:text-slate-400 font-mono text-center flex-1 max-w-[240px] truncate">
+                        {settings.tabTitle?.trim() || 'پورتال شیراز'} — Header View
+                      </div>
+                      <div className="text-[10px] text-slate-400 font-bold">100%</div>
+                    </div>
+
+                    {/* Actual Simulated Header Bar */}
+                    <div
+                      className={`w-full px-4 sm:px-6 py-3.5 transition-colors duration-200 flex flex-wrap items-center justify-between gap-3 border-b select-none ${
+                        headerPreviewTheme === 'dark'
+                          ? 'bg-[#080d19]/95 text-white border-white/[0.08]'
+                          : 'bg-white/95 text-slate-900 border-slate-200/90'
+                      }`}
+                    >
+                      {/* Right Side: Logo + Two Stacked Header Lines */}
+                      <div className="flex items-center gap-3">
+                        {settings.logoUrl ? (
+                          <img
+                            src={settings.logoUrl}
+                            alt={settings.title || 'Logo'}
+                            className="h-12 sm:h-14 md:h-16 w-auto max-w-[190px] object-contain border-0 outline-none shadow-none bg-transparent transition-transform duration-200 hover:scale-105"
+                          />
+                        ) : (
+                          <div className="w-11 h-11 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-2xl flex items-center justify-center shadow-md shadow-blue-500/25 text-white shrink-0 border border-white/20 transition-transform duration-200 hover:scale-105">
+                            <Server className="w-6 h-6" />
+                          </div>
+                        )}
+
+                        <div className="flex flex-col justify-center text-right">
+                          <h1
+                            className={`text-sm sm:text-base md:text-lg font-black tracking-tight leading-snug transition-colors ${
+                              headerPreviewTheme === 'dark' ? 'text-white' : 'text-slate-900'
+                            }`}
+                          >
+                            {settings.title?.trim() || 'مدیریت منابع انسانی ایران'}
+                          </h1>
+                          {settings.subtitle?.trim() && (
+                            <span
+                              className={`text-xs sm:text-sm font-bold leading-tight mt-0.5 transition-colors ${
+                                headerPreviewTheme === 'dark' ? 'text-slate-300' : 'text-slate-600'
+                              }`}
+                            >
+                              {settings.subtitle.trim()}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Left Side: Mock Controls matching Homepage */}
+                      <div className="flex items-center gap-2">
+                        {/* Live Clock Simulator */}
+                        <div
+                          className={`hidden md:flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-semibold font-mono ${
+                            headerPreviewTheme === 'dark'
+                              ? 'bg-slate-900/60 border-white/10 text-slate-300'
+                              : 'bg-slate-100/80 border-slate-200 text-slate-700'
+                          }`}
+                        >
+                          <Clock className="w-3.5 h-3.5 text-indigo-500" />
+                          <span>14:35:20</span>
+                        </div>
+
+                        {/* Theme Button Mockup */}
+                        <div
+                          className={`p-2 rounded-xl border flex items-center justify-center ${
+                            headerPreviewTheme === 'dark'
+                              ? 'bg-slate-900/60 border-white/10 text-amber-400'
+                              : 'bg-slate-100/80 border-slate-200 text-slate-700'
+                          }`}
+                        >
+                          {headerPreviewTheme === 'dark' ? (
+                            <Sun className="w-4 h-4 text-amber-400" />
+                          ) : (
+                            <Moon className="w-4 h-4 text-slate-700" />
+                          )}
+                        </div>
+
+                        {/* Admin/User Button Mockup */}
+                        <div className="px-3 py-1.5 rounded-xl text-xs font-bold bg-indigo-600 text-white flex items-center gap-1.5 shadow-sm">
+                          <Lock className="w-3.5 h-3.5" />
+                          <span>ورود مدیریت</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Hint Footer inside Mockup */}
+                    <div
+                      className={`px-4 py-2 text-[11px] font-medium flex items-center justify-between ${
+                        headerPreviewTheme === 'dark'
+                          ? 'bg-slate-950/80 text-slate-400 border-t border-slate-800'
+                          : 'bg-slate-50 text-slate-500 border-t border-slate-200/80'
+                      }`}
+                    >
+                      <span>نمای واقعی هدر صفحه اصلی در رزولوشن دسکتاپ و تبلت</span>
+                      <span className="font-semibold">
+                        سایز فونت: {settings.subtitle?.trim() ? 'دو سطری (تراز عمودی)' : 'تک‌سطری'}
+                      </span>
                     </div>
                   </div>
                 </div>
@@ -2768,8 +2902,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         </button>
                       )}
                     </div>
-                    <p className="text-[11px] text-slate-400">
-                      لوگوی شفاف (PNG یا SVG) بدون حاشیه در هدر هر دو پنل با ابعاد بزرگ و شفاف نمایش داده می‌شود.
+                    <p className="text-[11px] text-emerald-600 dark:text-emerald-400 font-medium flex items-center gap-1.5">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse shrink-0" />
+                      <span>با انتخاب یا حذف لوگو، تصویر جدید بلافاصله در کادر پیش‌نمایش زنده هدر بالا منعکس می‌شود.</span>
                     </p>
                   </div>
                 </div>

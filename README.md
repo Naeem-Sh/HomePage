@@ -1,307 +1,156 @@
-# Homelab Dashboard & Service Launcher (LinxDash)
+# 🌐 پورتال سازمانی و داشبورد هوم‌لب (Portal Shiraz / Homelab Dashboard)
 
-[![Docker Build](https://img.shields.io/badge/docker-ready-blue.svg?logo=docker&logoColor=white)](https://www.docker.com/)
-[![Node Version](https://img.shields.io/badge/node-%3E%3D22.0.0-brightgreen.svg?logo=node.js&logoColor=white)](https://nodejs.org/)
-[![React 19](https://img.shields.io/badge/react-19.0-61dafb.svg?logo=react&logoColor=black)](https://react.dev/)
-[![TypeScript](https://img.shields.io/badge/typescript-5.8-3178c6.svg?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
-[![Tailwind CSS v4](https://img.shields.io/badge/tailwind-v4.1-38bdf8.svg?logo=tailwindcss&logoColor=white)](https://tailwindcss.com/)
-[![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
-
-A modern, high-performance, and privacy-focused self-hosted homepage and application launcher designed for homelabs, home servers, and Linux enthusiasts. 
-
-LinxDash combines a refined glassmorphic interface with lightweight zero-database persistence, robust role-based access control (RBAC), and 60+ native homelab icons.
+یک پورتال مدرن، زیبا، سبک و پرسرعت برای مدیریت و دسترسی یکپارچه به سامانه‌ها، سرورها، خدمات و فایل‌های سازمانی با طراحی الهام‌گرفته از سیستم‌عامل macOS و پنل مدیریت پیشرفته.
 
 ---
 
-## Highlights & Features
+## 🚀 راه‌اندازی سریع با داکر (Docker & Docker Compose)
 
-- 🌐 **Instant Public Homepage**: Guest visitors landing on the root URL see public services immediately without an authentication wall.
-- 🔒 **Role-Based Access Control (RBAC)**:
-  - **Public Visitors**: Unauthenticated guests access only applications marked as public.
-  - **Private Users**: Authenticated users access their personal and authorized private services.
-  - **Administrators**: Full control over service registrations, category hierarchies, user management, and portal branding.
-- 💾 **Persistent & Zero-Maintenance Storage**:
-  - Uses an atomic file-based JSON persistence engine.
-  - No external database (PostgreSQL, MongoDB, etc.) required.
-  - All configurations, uploaded icons, wallpapers, and backups reside in a single persistent volume (`/app/data`), completely decoupled from container life cycles.
-- 🎨 **Modern Glassmorphic UI**:
-  - Balanced typography with fluid responsive layouts (Grid & List views).
-  - High-contrast dark and light modes with custom accent palettes.
-  - Live analog and digital clock with customizable display modes.
-- 📦 **60+ Built-In Homelab Icons**:
-  - Native vector icons for Proxmox, Portainer, Docker, Jellyfin, Plex, Nextcloud, Home Assistant, TrueNAS, Pi-hole, WireGuard, pfSense, AdGuard, Grafana, and more.
-  - Integrated custom upload for SVGs (with automated security sanitization stripping scripts and XSS vectors), PNGs, and WebP images.
-- 🗂️ **Local Share & UNC Path Helper**:
-  - Dedicated smart handler for `\\server\share`, `smb://`, and `file://` targets with 1-click clipboard copying and terminal mount helpers.
-- 🔄 **Disaster Recovery & Multi-Format Backups**:
-  - 1-click full ZIP snapshots containing `database.json`, individual model JSONs, an Excel sheet (`homelab-data.xlsx`), and uploaded files.
-  - Instant one-click restore with schema validation.
-- 🐳 **Production Docker Standards**:
-  - Multi-stage minimal Alpine build (`node:22-alpine`).
-  - Runs as an unprivileged non-root user (`USER node`).
-  - Built-in container health check.
-  - Graceful shutdown signal handling (`SIGTERM` / `SIGINT`).
+این پروژه کاملاً کانتینریزه شده و دارای بیلد چندمرحله‌ای بهینه (Multi-stage build) بر پایه `Node.js 22 Alpine` است.
 
----
+### پیش‌نیازها
+- نصب [Docker Engine](https://docs.docker.com/engine/install/)
+- نصب [Docker Compose](https://docs.docker.com/compose/install/)
 
-## Storage & Data Persistence (Why Data Survives Image Deletions)
-
-In Docker, data written directly inside a container is lost when the container is deleted. To guarantee that **your data is never erased when removing, updating, or pulling new container images**, LinxDash consolidates all mutable state into a single volume mount point: `/app/data`.
-
-```
-/app/data/                    <--- Mount this directory to a Docker Volume or Host Folder
-├── database.json             <--- Core state: applications, categories, users, settings, audit logs
-├── visits.json               <--- Analytics and visit counters
-├── uploads/                  <--- Custom icons, portal logos, custom backgrounds, and PDF guides
-│   └── icons/
-└── backups/                  <--- Auto and manual .ZIP snapshots
-```
-
-As long as `/app/data` is mounted to a **Docker Named Volume** or a **Host Directory Bind Mount**, you can run `docker rm`, `docker rmi`, or pull new image tags without losing a single byte.
-
----
-
-## Quick Start with Docker
-
-### Option 1: Docker Compose (Recommended)
-
-1. Create a `docker-compose.yml` file:
-
-```yaml
-version: '3.8'
-
-services:
-  homelab-dashboard:
-    image: homelab-dashboard:latest
-    # Or build locally:
-    # build: .
-    container_name: homelab-dashboard
-    restart: unless-stopped
-    ports:
-      - "3000:3000"
-    environment:
-      - NODE_ENV=production
-      - PORT=3000
-      - DATA_DIR=/app/data
-      - JWT_SECRET=replace_with_a_secure_random_string_in_production
-    volumes:
-      # Named volume: persists your database, uploads, and backups safely
-      - homelab_data:/app/data
-
-      # Alternative: Host directory bind mount
-      # - ./data:/app/data
-    healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/api/public/config"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 15s
-
-volumes:
-  homelab_data:
-    driver: local
-```
-
-2. Start the container in detached mode:
+### ۱. اجرای مستقیم با Docker Compose (پیشنهادی)
+تنها با اجرای دستور زیر در پوشه پروژه، کل سامانه بیلد شده و روی پورت `4500` اجرا می‌شود:
 
 ```bash
-docker compose up -d
+docker compose up -d --build
 ```
 
-3. Open your browser at `http://localhost:3000`. On first launch, follow the on-screen prompt or use the admin login to start adding categories and services.
+پس از بالا آمدن کانتینر، سامانه در آدرس زیر در دسترس است:
+👉 **http://localhost:4500**
+
+برای مشاهده لاگ‌های اجرای سرور:
+```bash
+docker compose logs -f
+```
+
+برای توقف سرویس:
+```bash
+docker compose down
+```
 
 ---
 
-### Option 2: Docker CLI (`docker run`)
-
-Run LinxDash with a named volume:
+### ۲. اجرای مستقل با Dockerfile (بدون Compose)
 
 ```bash
-# 1. Create a persistent Docker volume
-docker volume create homelab_data
+# بیلد ایمیج داکر
+docker build -t portal-shiraz:latest .
 
-# 2. Run the container attached to the volume
+# اجرای کانتینر با مانت کردن ولوم ماندگاری داده‌ها در دایرکتوری اختصاصی خارج از کانتینر
 docker run -d \
-  --name homelab-dashboard \
+  --name portal_shiraz_app \
+  -p 4500:4500 \
+  -v $(pwd)/portal_shiraz_data:/app/data \
   --restart unless-stopped \
-  -p 3000:3000 \
-  -e NODE_ENV=production \
-  -e JWT_SECRET="your-super-secret-jwt-token" \
-  -v homelab_data:/app/data \
-  homelab-dashboard:latest
-```
-
-*To use a local folder on your host machine instead of a named volume:*
-```bash
-docker run -d \
-  --name homelab-dashboard \
-  --restart unless-stopped \
-  -p 3000:3000 \
-  -e NODE_ENV=production \
-  -v $(pwd)/data:/app/data \
-  homelab-dashboard:latest
+  portal-shiraz:latest
 ```
 
 ---
 
-## How to Upgrade Without Data Loss
+## 🔄 همگام‌سازی با گیت‌هاب (GitHub Sync & Push)
 
-When a new version or image is released, upgrade seamlessly with zero data loss:
+برای ایجاد یا اتصال این مخزن به گیت‌هاب شخصی یا سازمانی خود، مراحل ساده زیر را دنبال کنید:
 
+### گام اول: مقداردهی اولیه گیت (در صورت نیاز)
 ```bash
-# Pull the latest image
-docker compose pull
-
-# Recreate the container with existing persistent volume
-docker compose up -d
-```
-
-Because your data is stored in the volume `homelab_data`, the old container and old image are discarded, and the new container starts with your existing applications, users, and uploaded files.
-
----
-
-## Configuration & Environment Variables
-
-| Variable | Default | Description |
-| :--- | :--- | :--- |
-| `PORT` | `3000` | HTTP port the server binds to |
-| `NODE_ENV` | `production` | Node.js execution environment (`development` / `production`) |
-| `DATA_DIR` | `/app/data` | Path to persistent storage directory for data, uploads, and backups |
-| `JWT_SECRET` | *(auto-generated)* | Cryptographic key used to sign and verify user session tokens |
-| `INITIAL_ADMIN_USER` | `admin` | Initial admin username created if database is empty on first boot |
-| `INITIAL_ADMIN_PASSWORD` | `123` | Initial admin password created if database is empty on first boot |
-| `RESET_ADMIN_PASSWORD` | `false` | Set to `true` to force reset admin password to INITIAL_ADMIN_PASSWORD |
-| `UPLOADS_DIR` | `$DATA_DIR/uploads` | Optional custom path for uploaded images and attachments |
-| `BACKUPS_DIR` | `$DATA_DIR/backups` | Optional custom path for backup archive files |
-
----
-
-## 🚀 ارسال پروژه به گیت‌هاب (Pushing to GitHub)
-
-تمامی فایل‌های دیتابیس شخصی، آپلودها، لاگ‌ها و فایل‌های محیطی (`.env`) به صورت استاندارد در `.gitignore` قرار گرفته‌اند تا هیچ‌گونه اطلاعات شخصی یا حساسی به گیت‌هاب منتقل نشود.
-
-برای ارسال این پروژه به مخزن گیت‌هاب خود، مراحل زیر را در ترمینال پوشه پروژه اجرا کنید:
-
-```bash
-# ۱. ایجاد مخزن محلی گیت (در صورت نیاز)
 git init
-
-# ۲. افزودن تمام فایل‌های تمیز و بدون داده
 git add .
+git commit -m "Initial commit: Dockerized Portal Shiraz dashboard ready for production"
+```
 
-# ۳. ثبت اولین کامیت
-git commit -m "feat: complete dockerized homelab dashboard"
+### گام دوم: اتصال به مخزن گیت‌هاب (Remote Origin)
+مخزن جدیدی در حساب کاربری GitHub خود بسازید (بدون اضافه کردن README یا .gitignore پیش‌فرض)، سپس:
 
-# ۴. تنظیم شاخه اصلی
+```bash
+# نام شاخه اصلی به main
 git branch -M main
 
-# ۵. اتصال به ریپوزیتوری گیت‌هاب شما (آدرس خود را جایگزین کنید)
-git remote add origin https://github.com/USERNAME/REPOSITORY_NAME.git
+# افزودن آدرس مخزن گیت‌هاب شما (آدرس مخزن خود را جایگزین کنید)
+git remote add origin https://github.com/YOUR_USERNAME/YOUR_REPOSITORY.git
 
-# ۶. ارسال کدهای تمیز به گیت‌هاب
+# ارسال کدها به گیت‌هاب
 git push -u origin main
 ```
 
----
-
-## 🔄 نحوه آپدیت برنامه روی سرور بدون حذف داده‌ها (Safe Server Updates)
-
-روی سرور، چون داده‌های شما در پوشه خارج از کانتینر (مانند `./data` یا `/opt/homelab-data`) ذخیره می‌شوند، می‌توانید با خیال راحت آخرین نسخه را دریافت و بیلد کنید:
-
+### گام سوم: دریافت آخرین تغییرات از گیت‌هاب در سرور
+هر زمان که در سرور یا محیط جدید کدهای مخزن را دریافت کردید:
 ```bash
-# ۱. دریافت آخرین تغییرات از گیت‌هاب
 git pull origin main
-
-# ۲. بیلد مجدد ایمیج و استارت کانتینر بدون وقفه
 docker compose up -d --build
 ```
-> **نکته بسیار مهم:** تمام برنامه‌ها، دسته‌بندی‌ها، لوگوهای آپلودشده، تنظیمات و **رمز عبور تغییریافته ادمین** بدون کوچک‌ترین تغییری در پوشه دائمی شما باقی خواهند ماند.
-
 
 ---
 
-## Reverse Proxy Examples
+## 💾 دایرکتوری اختصاصی داده‌ها خارج از کانتینر (Data Persistence & Backup)
 
-### Nginx
+تمامی داده‌ها، تنظیمات، فایل‌های دیتابیس JSON، تصاویر و لوگوهای آپلود شده و فایل‌های پشتیبان در پوشه اختصاصی `./portal_shiraz_data` در هاست شما (خارج از کانتینر) ذخیره می‌شوند:
 
-```nginx
-server {
-    listen 80;
-    server_name dashboard.homelab.local;
+- `portal_shiraz_data/database.json`: پایگاه داده سامانه‌ها، دسته‌بندی‌ها، کاربران و تنظیمات پورتال
+- `portal_shiraz_data/visits.json`: شمارنده آمار بازدیدها
+- `portal_shiraz_data/uploads/`: فایل‌ها، مستندات PDF و لوگوهای آپلودشده
+- `portal_shiraz_data/backups/`: فایل‌های پشتیبان زیپ ایجادشده از پنل مدیریت
 
-    client_max_body_size 25M;
-
-    location / {
-        proxy_pass http://127.0.0.1:3000;
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection 'upgrade';
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-    }
-}
-```
-
-### Traefik
-
-```yaml
-services:
-  homelab-dashboard:
-    image: homelab-dashboard:latest
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.dashboard.rule=Host(`dashboard.homelab.local`)"
-      - "traefik.http.routers.dashboard.entrypoints=websecure"
-      - "traefik.http.routers.dashboard.tls.certresolver=myresolver"
-      - "traefik.http.services.dashboard.loadbalancer.server.port=3000"
-```
-
-### Caddy
-
-```caddy
-dashboard.homelab.local {
-    reverse_proxy 127.0.0.1:3000
-}
-```
+> 🔒 **امنیت:** پوشه `portal_shiraz_data` در فایل `.gitignore` قرار داده شده تا اطلاعات واقعی سرور یا کاربران هرگز به اشتباه در گیت‌هاب عمومی بارگذاری نشوند.
 
 ---
 
-## Local Development Setup
+## 🔑 اطلاعات ورود پیش‌فرض به پنل مدیریت
 
-If you wish to contribute or run LinxDash directly from source:
+- **نام کاربری:** `admin`
+- **رمز عبور:** `123`
+- **نکته مهم:** **هیچ الزامی به تغییر رمز عبور در اولین ورود وجود ندارد.** سیستم به‌صورت خودکار آماده به کار بوده و در صورت تمایل، هر زمان می‌توانید از تب «مدیریت کاربران» در پنل، رمز عبور را ویرایش فرمایید.
+- **آدرس ورود:** آیکون قفل در گوشه هدر یا مسیر `/` و کلیک روی دکمه ورود مدیریت
+
+---
+
+## ⚙️ متغیرهای محیطی (Environment Variables)
+
+می‌توانید فایل `.env.example` را به `.env` کپی کرده و تنظیمات را شخصی‌سازی کنید:
 
 ```bash
-# 1. Clone repository
-git clone https://github.com/your-username/homelab-dashboard.git
-cd homelab-dashboard
+cp .env.example .env
+```
 
-# 2. Install dependencies
+| متغیر | مقدار پیش‌فرض | توضیحات |
+| :--- | :--- | :--- |
+| `PORT` | `4500` | پورت وب‌سرور داخل کانتینر و هاست |
+| `NODE_ENV` | `production` | حالت اجرای سرور |
+| `JWT_SECRET` | رشته تصادفی | کلید امنیتی امضای توکن‌های احراز هویت ادمین |
+| `INITIAL_ADMIN_USER` | `admin` | نام کاربری اولیه مدیر در صورت خالی بودن دیتابیس |
+| `INITIAL_ADMIN_PASSWORD` | `123` | رمز عبور اولیه مدیر |
+| `RESET_ADMIN_PASSWORD` | `false` | در صورت تنظیم روی `true`، رمز عبور مدیر ریست می‌شود |
+| `DATA_DIR` | `/app/data` | مسیر ذخیره‌سازی داده‌های دائمی در کانتینر |
+
+---
+
+## 🛠️ توسعه و اجرای محلی (بدون داکر)
+
+```bash
+# نصب پکیج‌ها
 npm install
 
-# 3. Start development server (with tsx and Vite middleware)
+# اجرای حالت توسعه با لایو ریلود
 npm run dev
 
-# 4. Build production bundle (Vite + esbuild CJS server)
+# بررسی سلامت کدها (Linting)
+npm run lint
+
+# بیلد نهایی سرور و فرانت‌اند
 npm run build
 
-# 5. Start production build
+# اجرای سرور پروداکشن بیلد شده
 npm start
 ```
 
 ---
 
-## Security Architecture
-
-1. **Password Hashing**: Passwords are encrypted with `bcrypt` (10 salt rounds) before persistence.
-2. **Brute-Force Mitigation**: Login endpoints enforce request throttling and rate limiting.
-3. **SVG Sanitization**: All uploaded vector icons pass through an aggressive DOM sanitizer stripping `<script>`, inline event handlers (`onload`, `onerror`), and `javascript:` URIs.
-4. **ETag & Caching**: Public configuration and static asset routes provide HTTP 304 caching and immutable cache-control headers.
-5. **Non-Root Execution**: The container strictly executes as unprivileged user `node:node`.
-
----
-
-## License
-
-This project is licensed under the [MIT License](LICENSE).
+## 📋 ویژگی‌های کلیدی سامانه
+- 🎨 رابط کاربری فوق‌العاده سریع با Tailwind CSS v4 و فونت وزیرمتن فارسی
+- 🌓 پشتیبانی خودکار و دستی از حالت روز (Light) و حالت شب (Dark)
+- 🖥️ پیش‌نمایش زنده و بلادرنگ هدر، لوگو و عنوان در پنل مدیریت
+- 📦 آیکون‌های وکتور اختصاصی SVG داخلی برای انواع سرویس‌های هوم‌لب، شبکه و لینوکس
+- 📊 سیستم پایش سلامت سرویس‌ها، مانیتورینگ تلمتری، و پشتیبان‌گیری کامل در فایل ZIP و Excel

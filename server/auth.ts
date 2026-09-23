@@ -4,7 +4,7 @@ import bcrypt from 'bcryptjs';
 import { db } from './db';
 import { User, UserRole } from './types';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'linxdash-secret-token-key-change-in-production';
+const JWT_SECRET = process.env.JWT_SECRET?.trim() || 'shiraz_portal_jwt_secret_token_2026';
 const TOKEN_EXPIRY = '60m'; // Expire session after 60 minutes
 
 export interface AuthPayload {

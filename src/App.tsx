@@ -28,9 +28,9 @@ export default function App() {
   const [viewMode, setViewMode] = useState<'home' | 'admin'>('home');
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
 
-  // Admin Direct Login Form State
-  const [adminUsername, setAdminUsername] = useState('');
-  const [adminPassword, setAdminPassword] = useState('');
+  // Admin Direct Login Form State (Pre-filled with default admin/123)
+  const [adminUsername, setAdminUsername] = useState('admin');
+  const [adminPassword, setAdminPassword] = useState('123');
   const [showAdminPassword, setShowAdminPassword] = useState(false);
   const [adminLoginError, setAdminLoginError] = useState<string | null>(null);
   const [isAdminLoggingIn, setIsAdminLoggingIn] = useState(false);

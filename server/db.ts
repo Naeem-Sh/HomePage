@@ -18,6 +18,11 @@ function resolveDataDir(): string {
     return path.resolve(process.env.DATA_DIR.trim());
   }
 
+  const portalDataDir = path.join(process.cwd(), 'portal_shiraz_data');
+  if (fs.existsSync(portalDataDir)) {
+    return portalDataDir;
+  }
+
   const configFiles = [
     path.join(process.cwd(), '.datadir'),
     path.join(process.cwd(), 'data-dir.conf')

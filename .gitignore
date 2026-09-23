@@ -5,15 +5,24 @@ node_modules/
 
 # Build and Bundle Outputs
 dist/
+dist/server.cjs
 build/
 server.js
-dist/server.cjs
 coverage/
 
 # Application Persistent Data & Uploads (NEVER commit user data to git!)
-data/
-uploads/
-backups/
+portal_shiraz_data/*
+!portal_shiraz_data/.gitkeep
+!portal_shiraz_data/backups/.gitkeep
+!portal_shiraz_data/uploads/.gitkeep
+data/*
+!data/.gitkeep
+!data/backups/.gitkeep
+!data/uploads/.gitkeep
+uploads/*
+!uploads/.gitkeep
+backups/*
+!backups/.gitkeep
 database.json*
 visits.json*
 *.tmp
@@ -21,9 +30,8 @@ visits.json*
 
 # Environment Variables and Local Secrets
 .env
+.env.local
 .env.*
-!.env.example
-!.env.docker.example
 .datadir
 
 # Logs
@@ -40,5 +48,3 @@ Thumbs.db
 .vscode/
 *.swp
 *.swo
-
-

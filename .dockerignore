@@ -1,25 +1,29 @@
+# Directories
 node_modules
 dist
+dist/server.cjs
 build
+.git
+.github
+
+# Persistent storage & backups (mounted via volumes)
 data
 uploads
 backups
 *.tmp
 *.bak
-database.json*
-visits.json*
-.git
-.gitignore
-.dockerignore
+
+# Environment and secrets
+.env
+.env.local
+.env.*
+!.env.example
+
+# Logs and system
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
-bun.lock
-.env
-.env.*
-!.env.example
-.datadir
-docker_application_audit_report.txt
 .DS_Store
-*.log
-
+Thumbs.db
+.idea
+.vscode
