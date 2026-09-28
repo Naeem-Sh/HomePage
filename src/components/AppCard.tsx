@@ -3,6 +3,7 @@ import {
   ExternalLink,
   HardDrive,
   FileText,
+  Image,
   Star,
   GripVertical,
   Info,
@@ -54,12 +55,12 @@ export const AppCard: React.FC<AppCardProps> = ({
   const cardRef = useRef<HTMLDivElement>(null);
   const health = useAppHealth(app.id);
 
-  // If app has an attached file (app.fileUrl) or if app.url is a server upload / PDF
+  // If app has an attached file (app.fileUrl) or if app.url is a server upload / document
   const isAttachedFile = Boolean(app.fileUrl && app.fileUrl.trim() !== '');
   const isFileUrl =
     isAttachedFile ||
     app.url.startsWith('/uploads/') ||
-    app.url.toLowerCase().endsWith('.pdf') ||
+    /\.(pdf|docx?|xlsx?|csv|html?|txt|md|zip|rar)$/i.test(app.url) ||
     app.url.startsWith('file://');
 
   const effectiveUrl = isAttachedFile ? app.fileUrl! : app.url;
@@ -71,11 +72,27 @@ export const AppCard: React.FC<AppCardProps> = ({
       app.url.startsWith('nfs://') ||
       app.url.startsWith('file://'));
 
-  const isPdf =
-    effectiveUrl.toLowerCase().endsWith('.pdf') ||
-    (app.fileName && app.fileName.toLowerCase().endsWith('.pdf'));
+  const fileExt = (app.fileName || effectiveUrl).split('?')[0].split('#')[0].split('.').pop()?.toLowerCase() || '';
+  const isImageFile = ['jpg', 'jpeg', 'png', 'svg', 'webp', 'gif', 'avif', 'bmp', 'ico'].includes(fileExt);
+  const isPdf = fileExt === 'pdf';
+  const isWord = ['doc', 'docx'].includes(fileExt);
+  const isExcel = ['xls', 'xlsx', 'csv'].includes(fileExt);
+  const isHtml = ['html', 'htm'].includes(fileExt);
+  const isDocument = isPdf || isWord || isExcel || isHtml || ['txt', 'md'].includes(fileExt);
+
   const isHttps = effectiveUrl.startsWith('https://');
-  const accentColor = app.accentColor || (isPdf ? '#EF4444' : '#3B82F6');
+  const defaultFileColor = isPdf
+    ? '#EF4444'
+    : isWord
+    ? '#2563EB'
+    : isExcel
+    ? '#16A34A'
+    : isHtml
+    ? '#EA580C'
+    : isImageFile
+    ? '#10B981'
+    : '#3B82F6';
+  const accentColor = app.accentColor || (isAttachedFile || isFileUrl ? defaultFileColor : '#3B82F6');
   const isImg = isImageIcon(app.icon);
 
   // Check if device supports hover and fine pointer (mouse / trackpad)
@@ -468,7 +485,9 @@ export const AppCard: React.FC<AppCardProps> = ({
               <div className="p-1.5 rounded-xl text-slate-400 group-hover:text-blue-500 dark:group-hover:text-blue-400 transition-colors">
                 {isUncOrLocal ? (
                   <HardDrive className="w-4 h-4" />
-                ) : isPdf ? (
+                ) : isImageFile ? (
+                  <Image className="w-4 h-4" />
+                ) : isPdf || isWord || isExcel || isHtml || isDocument ? (
                   <FileText className="w-4 h-4" />
                 ) : (
                   <ArrowUpRight className="w-4 h-4 opacity-70 group-hover:opacity-100" />
@@ -484,7 +503,23 @@ export const AppCard: React.FC<AppCardProps> = ({
         <div className="flex items-center justify-between gap-2 mb-1.5">
           <div className="flex items-center gap-1.5 min-w-0">
             <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider truncate">
-              {isUncOrLocal ? 'اشتراک شبکه' : isPdf ? 'سند و فایل' : isHttps ? 'امن HTTPS' : 'پروتکل HTTP'}
+              {isUncOrLocal
+                ? 'اشتراک شبکه'
+                : isPdf
+                ? 'سند PDF'
+                : isImageFile
+                ? `تصویر ${fileExt.toUpperCase()}`
+                : isWord
+                ? 'سند Word'
+                : isExcel
+                ? 'شیت Excel'
+                : isHtml
+                ? 'صفحه HTML'
+                : isAttachedFile || isFileUrl
+                ? 'سند و فایل'
+                : isHttps
+                ? 'امن HTTPS'
+                : 'پروتکل HTTP'}
             </span>
           </div>
 

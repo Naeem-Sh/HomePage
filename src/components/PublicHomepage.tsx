@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
+  LogIn,
   LogOut,
   Server,
   LayoutGrid,
@@ -380,7 +381,10 @@ export const PublicHomepage: React.FC<PublicHomepageProps> = ({
   }, [selectedCategoryId, sortedCategories, categories, activeApps, favoriteApps]);
 
   return (
-    <div className={`relative min-h-screen ${activeBgTheme.lightBaseBg} dark:${activeBgTheme.darkBaseBg} text-slate-900 dark:text-slate-100 flex flex-col selection:bg-blue-500 selection:text-white transition-colors duration-500`} dir="rtl">
+    <div
+      className="relative min-h-screen text-slate-900 dark:text-slate-100 flex flex-col selection:bg-blue-500 selection:text-white transition-colors duration-500"
+      dir="rtl"
+    >
       {/* 1. Spatial Ambient Atmospheric Backdrop or Offline Local Server Wallpaper */}
       {safeSettings.backgroundUrl ? (
         <div
@@ -492,7 +496,7 @@ export const PublicHomepage: React.FC<PublicHomepageProps> = ({
               </button>
             </div>
 
-            {/* Background Theme Palette Picker (7 Vibrant Themes Cached in Browser) */}
+            {/* Background Pattern Swatches Picker (15 Diverse Patterns Matching User's Screenshot) */}
             <BgThemePicker
               currentThemeId={bgThemeId}
               onSelectTheme={handleBgThemeChange}
@@ -501,17 +505,30 @@ export const PublicHomepage: React.FC<PublicHomepageProps> = ({
             {/* Dark / Light Theme Mode Toggle */}
             <ThemeToggle theme={theme} onToggle={onThemeToggle} />
 
-            {/* Single Admin Icon Button (Navigates to Admin or opens Login) */}
-            <button
-              type="button"
-              id="admin-entry-icon-button"
-              onClick={currentUser ? onOpenAdmin : onOpenLogin}
-              title={currentUser ? `کنترل‌پنل مدیریت (${currentUser.username})` : 'ورود به پنل مدیریت'}
-              aria-label="کنترل‌پنل مدیریت"
-              className="p-2 rounded-2xl bg-slate-200/70 dark:bg-white/[0.06] border border-slate-300/80 dark:border-white/[0.12] text-slate-700 dark:text-slate-300 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/40 hover:border-blue-300 dark:hover:border-blue-700/60 transition-all duration-200 cursor-pointer min-h-[34px] min-w-[34px] flex items-center justify-center shadow-xs"
-            >
-              <Shield className="w-4 h-4" />
-            </button>
+            {/* Login / Admin Action Button (Icon button style, no tooltip) */}
+            {!currentUser ? (
+              <button
+                type="button"
+                id="admin-entry-button"
+                onClick={onOpenLogin}
+                aria-label="ورود"
+                className="p-2 sm:px-2.5 rounded-2xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-bold shadow-md shadow-blue-500/20 hover:shadow-lg transition-all duration-200 cursor-pointer min-h-[36px] min-w-[36px] flex items-center justify-center active:scale-95"
+              >
+                <LogIn className="w-4 h-4 rtl:rotate-180" />
+              </button>
+            ) : (
+              <button
+                type="button"
+                id="admin-entry-icon-button"
+                onClick={onOpenAdmin}
+                title={`کنترل‌پنل مدیریت (${currentUser.username})`}
+                aria-label="کنترل‌پنل مدیریت"
+                className="px-3.5 py-1.5 rounded-2xl bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-200 dark:border-indigo-800 text-indigo-600 dark:text-indigo-400 font-bold text-xs hover:bg-indigo-100 dark:hover:bg-indigo-900/60 transition-all duration-200 cursor-pointer min-h-[36px] flex items-center justify-center gap-1.5 shadow-xs"
+              >
+                <Shield className="w-3.5 h-3.5" />
+                <span>مدیریت</span>
+              </button>
+            )}
 
             {currentUser && (
               <button

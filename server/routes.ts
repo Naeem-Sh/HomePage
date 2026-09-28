@@ -970,7 +970,10 @@ router.get('/admin/documents', requireAdmin, (_req: AuthenticatedRequest, res: R
     }
     const files = fs.readdirSync(paths.uploadsDir);
     const docFiles = files
-      .filter((f) => f.startsWith('doc-') || f.endsWith('.pdf') || f.endsWith('.txt') || f.endsWith('.md'))
+      .filter((f) =>
+        f.startsWith('doc-') ||
+        /\.(pdf|txt|md|docx?|xlsx?|csv|html?|png|jpe?g|webp|gif|svg|avif|bmp|ico)$/i.test(f)
+      )
       .map((filename) => {
         const filePath = path.join(paths.uploadsDir, filename);
         const stat = fs.statSync(filePath);

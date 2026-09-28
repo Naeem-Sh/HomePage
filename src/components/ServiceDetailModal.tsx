@@ -71,11 +71,25 @@ export const ServiceDetailModal: React.FC<ServiceDetailModalProps> = ({
       app.url.startsWith('nfs://') ||
       app.url.startsWith('file://'));
 
-  const isPdf =
-    effectiveUrl.toLowerCase().endsWith('.pdf') ||
-    (app.fileName && app.fileName.toLowerCase().endsWith('.pdf'));
+  const fileExt = (app.fileName || effectiveUrl).split('?')[0].split('#')[0].split('.').pop()?.toLowerCase() || '';
+  const isImageFile = ['jpg', 'jpeg', 'png', 'svg', 'webp', 'gif', 'avif', 'bmp', 'ico'].includes(fileExt);
+  const isPdf = fileExt === 'pdf';
+  const isWord = ['doc', 'docx'].includes(fileExt);
+  const isExcel = ['xls', 'xlsx', 'csv'].includes(fileExt);
+  const isHtml = ['html', 'htm'].includes(fileExt);
   const isHttps = effectiveUrl.startsWith('https://');
-  const accentColor = app.accentColor || (isPdf ? '#EF4444' : '#3B82F6');
+  const defaultFileColor = isPdf
+    ? '#EF4444'
+    : isWord
+    ? '#2563EB'
+    : isExcel
+    ? '#16A34A'
+    : isHtml
+    ? '#EA580C'
+    : isImageFile
+    ? '#10B981'
+    : '#3B82F6';
+  const accentColor = app.accentColor || (isAttachedFile || isFileUrl ? defaultFileColor : '#3B82F6');
 
   const handleCopyUrl = async () => {
     try {
@@ -315,6 +329,14 @@ export const ServiceDetailModal: React.FC<ServiceDetailModalProps> = ({
                 : isAttachedFile || isFileUrl
                 ? isPdf
                   ? 'باز کردن سند PDF'
+                  : isImageFile
+                  ? 'مشاهده مستقیم تصویر'
+                  : isHtml
+                  ? 'باز کردن صفحه وب HTML'
+                  : isWord
+                  ? 'باز کردن سند Word'
+                  : isExcel
+                  ? 'باز کردن شیت Excel'
                   : 'باز کردن مستقیم فایل'
                 : 'اجرای سرویس'}
             </span>

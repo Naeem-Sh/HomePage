@@ -74,6 +74,7 @@ import {
 import { api, setStoredToken } from '../lib/api';
 import { toPersianDigits, formatPersianDate, formatBytes } from '../lib/utils';
 import { updateFaviconAndTitle } from '../lib/favicon';
+import { AppCard } from './AppCard';
 import { AppIcon } from './AppIcon';
 import { IconPickerModal } from './IconPickerModal';
 import { ThemeToggle } from './ThemeToggle';
@@ -545,6 +546,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       if (['pdf'].includes(ext)) {
         suggestedIcon = 'FileText';
         suggestedColor = '#EF4444'; // PDF Crimson Red
+      } else if (['doc', 'docx'].includes(ext)) {
+        suggestedIcon = 'FileText';
+        suggestedColor = '#2563EB'; // Word Blue
+      } else if (['xls', 'xlsx', 'csv'].includes(ext)) {
+        suggestedIcon = 'Table';
+        suggestedColor = '#16A34A'; // Excel Green
+      } else if (['html', 'htm'].includes(ext)) {
+        suggestedIcon = 'Globe';
+        suggestedColor = '#EA580C'; // HTML Web Orange
       } else if (['jpg', 'jpeg', 'png', 'svg', 'webp', 'gif'].includes(ext)) {
         suggestedIcon = 'Image';
         suggestedColor = '#10B981';
@@ -568,6 +578,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         ? editingApp.description
         : ext === 'pdf'
         ? 'سند PDF ذخیره شده روی سرور'
+        : ext === 'docx' || ext === 'doc'
+        ? 'سند Word ذخیره شده روی سرور'
+        : ext === 'xlsx' || ext === 'xls'
+        ? 'شیت Excel ذخیره شده روی سرور'
+        : ext === 'html' || ext === 'htm'
+        ? 'صفحه وب HTML روی سرور'
         : `فایل ${ext.toUpperCase()} ذخیره شده روی سرور`;
 
       setEditingApp({
@@ -600,23 +616,41 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       const res = await api.uploadDocument(file);
       const ext = file.name.split('.').pop()?.toLowerCase() || '';
       const isPdf = ext === 'pdf';
+      const isWord = ['doc', 'docx'].includes(ext);
+      const isExcel = ['xls', 'xlsx', 'csv'].includes(ext);
+      const isHtml = ['html', 'htm'].includes(ext);
+      const isImage = ['jpg', 'jpeg', 'png', 'svg', 'webp', 'gif', 'avif', 'bmp', 'ico'].includes(ext);
       const cleanName = file.name.replace(/\.[^/.]+$/, '').replace(/_/g, ' ').replace(/-/g, ' ');
 
+      const suggestedIcon = isImage ? 'Image' : isPdf || isWord ? 'FileText' : isExcel ? 'Table' : isHtml ? 'Globe' : 'FileCode2';
+      const suggestedColor = isImage ? '#10B981' : isPdf ? '#EF4444' : isWord ? '#2563EB' : isExcel ? '#16A34A' : isHtml ? '#EA580C' : '#3B82F6';
+      const suggestedDesc = isImage
+        ? 'تصویر باکیفیت ذخیره شده روی سرور (مشاهده مستقیم با ۱ کلیک)'
+        : isPdf
+        ? 'سند PDF ذخیره شده در سرور (باز شدن مستقیم با ۱ کلیک)'
+        : isWord
+        ? 'سند Word ذخیره شده در سرور (دانلود و باز شدن با ۱ کلیک)'
+        : isExcel
+        ? 'شیت اکسل Excel در سرور (دانلود و باز شدن با ۱ کلیک)'
+        : isHtml
+        ? 'صفحه وب HTML در سرور (نمایش مستقیم در مرورگر)'
+        : `فایل ${ext.toUpperCase()} در سرور`;
+
       const newAppPayload = {
-        name: cleanName || 'سند PDF جدید',
-        description: isPdf ? 'سند PDF ذخیره شده در سرور (باز شدن مستقیم با ۱ کلیک)' : `فایل ${ext.toUpperCase()} در سرور`,
+        name: cleanName || 'سند جدید',
+        description: suggestedDesc,
         url: res.url,
         fileUrl: res.url,
         fileName: file.name,
         categoryId: categories[0]?.id || 'cat-infra',
-        icon: isPdf ? 'FileText' : 'FileCode2',
+        icon: suggestedIcon,
         isPublic: true,
         dashboards: ['public', 'admin'],
         isEnabled: true,
         sortOrder: applications.length + 1,
-        accentColor: isPdf ? '#EF4444' : '#3B82F6',
+        accentColor: suggestedColor,
         openInNewTab: true,
-        tags: ['pdf', 'document', 'server-file']
+        tags: [ext, 'document', 'server-file']
       };
 
       const created = await api.createApplication(newAppPayload as any);
@@ -632,28 +666,47 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
   const handleCreateAppFromDoc = async (doc: { filename: string; url: string; ext: string }) => {
     try {
-      const isPdf = doc.ext === 'pdf';
+      const ext = doc.ext.toLowerCase();
+      const isPdf = ext === 'pdf';
+      const isWord = ['doc', 'docx'].includes(ext);
+      const isExcel = ['xls', 'xlsx', 'csv'].includes(ext);
+      const isHtml = ['html', 'htm'].includes(ext);
+      const isImage = ['jpg', 'jpeg', 'png', 'svg', 'webp', 'gif', 'avif', 'bmp', 'ico'].includes(ext);
       const cleanTitle = doc.filename
         .replace(/^doc-/, '')
         .replace(/-[a-f0-9]{8}\.[^.]+$/, '')
         .replace(/_/g, ' ')
         .replace(/-/g, ' ');
 
+      const suggestedIcon = isImage ? 'Image' : isPdf || isWord ? 'FileText' : isExcel ? 'Table' : isHtml ? 'Globe' : 'FileCode2';
+      const suggestedColor = isImage ? '#10B981' : isPdf ? '#EF4444' : isWord ? '#2563EB' : isExcel ? '#16A34A' : isHtml ? '#EA580C' : '#3B82F6';
+      const suggestedDesc = isImage
+        ? 'تصویر باکیفیت ذخیره شده روی سرور (مشاهده مستقیم با ۱ کلیک)'
+        : isPdf
+        ? 'سند PDF ذخیره شده در سرور (باز شدن مستقیم با ۱ کلیک)'
+        : isWord
+        ? 'سند Word ذخیره شده در سرور (دانلود و باز شدن با ۱ کلیک)'
+        : isExcel
+        ? 'شیت اکسل Excel در سرور (دانلود و باز شدن با ۱ کلیک)'
+        : isHtml
+        ? 'صفحه وب HTML در سرور (نمایش مستقیم در مرورگر)'
+        : `فایل ${ext.toUpperCase()} در سرور`;
+
       const newAppPayload = {
         name: cleanTitle || 'سند سرور',
-        description: isPdf ? 'سند PDF ذخیره شده در سرور (باز شدن مستقیم با ۱ کلیک)' : `فایل ${doc.ext.toUpperCase()} در سرور`,
+        description: suggestedDesc,
         url: doc.url,
         fileUrl: doc.url,
         fileName: doc.filename,
         categoryId: categories[0]?.id || 'cat-infra',
-        icon: isPdf ? 'FileText' : 'FileCode2',
+        icon: suggestedIcon,
         isPublic: true,
         dashboards: ['public', 'admin'],
         isEnabled: true,
         sortOrder: applications.length + 1,
-        accentColor: isPdf ? '#EF4444' : '#3B82F6',
+        accentColor: suggestedColor,
         openInNewTab: true,
-        tags: ['pdf', 'document']
+        tags: [ext, 'document']
       };
 
       const created = await api.createApplication(newAppPayload as any);
@@ -1811,7 +1864,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       type="file"
                       ref={quickPdfInputRef}
                       onChange={handleQuickCreatePdfApp}
-                      accept=".pdf,application/pdf"
+                      accept=".pdf,application/pdf,.doc,.docx,.xls,.xlsx,.html,.htm,.txt,.md,.png,.jpg,.jpeg,.webp,.gif,.svg,.avif,.bmp"
                       className="hidden"
                       id="admin-quick-pdf-upload-input"
                     />
@@ -1821,10 +1874,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       onClick={() => quickPdfInputRef.current?.click()}
                       disabled={isQuickUploadingPdf}
                       className="flex-1 sm:flex-initial px-3.5 py-2 rounded-xl text-xs font-bold bg-rose-600 hover:bg-rose-700 text-white shadow-xs flex items-center justify-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50"
-                      title="آپلود مستقیم یک فایل PDF در سرور و ایجاد خودکار دکمه برای آن"
+                      title="آپلود مستقیم یک فایل یا تصویر (PDF، Word، Excel، HTML، PNG، JPG) در سرور و ایجاد خودکار دکمه برای آن"
                     >
                       <FileText className={`w-4 h-4 ${isQuickUploadingPdf ? 'animate-bounce' : ''}`} />
-                      <span>{isQuickUploadingPdf ? 'در حال ایجاد...' : 'آپلود سریع دکمه PDF'}</span>
+                      <span>{isQuickUploadingPdf ? 'در حال ایجاد...' : 'آپلود سریع فایل / تصویر'}</span>
                     </button>
 
                     <button
@@ -4137,6 +4190,82 @@ echo "DATA_DIR=/opt/homelab-data" >> .env
             </div>
 
             <form onSubmit={handleSaveApp} className="p-5 sm:p-6 flex-1 overflow-y-auto space-y-4 text-xs">
+              {/* 0. Live Preview Section */}
+              {(() => {
+                const selectedCategoryName =
+                  categories.find((c) => c.id === editingApp.categoryId)?.name ||
+                  categories[0]?.name ||
+                  'دسته‌بندی عمومی';
+
+                const effectivePreviewUrl =
+                  appDestType === 'file'
+                    ? (editingApp.fileUrl || editingApp.url || '/uploads/sample.pdf')
+                    : (editingApp.url || 'https://server.local');
+
+                const previewAppObj: Application = {
+                  id: editingApp.id || 'preview-temp-app',
+                  name: editingApp.name?.trim() ? editingApp.name : 'نام دکمه (پیش‌نمایش)',
+                  description: editingApp.description?.trim()
+                    ? editingApp.description
+                    : 'توضیحات و راهنمای کوتاه عملکرد سرویس...',
+                  url: effectivePreviewUrl,
+                  fileUrl: appDestType === 'file' ? (editingApp.fileUrl || editingApp.url) : undefined,
+                  fileName: editingApp.fileName,
+                  categoryId: editingApp.categoryId || categories[0]?.id || 'cat-infra',
+                  icon: editingApp.icon || 'terminal',
+                  isPublic: editingApp.isPublic !== false,
+                  isEnabled: editingApp.isEnabled !== false,
+                  sortOrder: editingApp.sortOrder || 1,
+                  accentColor: editingApp.accentColor || '#2563EB',
+                  openInNewTab: editingApp.openInNewTab !== false,
+                  dashboards: editingApp.dashboards || ['public', 'admin'],
+                  tags: editingApp.tags || []
+                };
+
+                return (
+                  <div className="p-3.5 sm:p-4 rounded-2xl bg-gradient-to-b from-slate-100/90 via-slate-50/60 to-white/90 dark:from-slate-950/90 dark:via-slate-900/60 dark:to-slate-950/90 border border-slate-200/90 dark:border-slate-800/90 space-y-3 shadow-2xs">
+                    <div className="flex items-center justify-between pb-2 border-b border-slate-200/60 dark:border-slate-800/60">
+                      <div className="flex items-center gap-1.5 text-slate-900 dark:text-slate-100 font-bold text-xs">
+                        <Eye className="w-3.5 h-3.5 text-blue-500 animate-pulse" />
+                        <span>پیش‌نمایش زنده دکمه (مشاهده لحظه‌ای)</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-[10px] text-slate-400 hidden sm:inline">
+                          تغییرات با هر ویرایش همزمان اعمال می‌شوند
+                        </span>
+                        <span
+                          className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                            editingApp.isEnabled !== false
+                              ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/70 dark:text-emerald-300'
+                              : 'bg-rose-100 text-rose-700 dark:bg-rose-950/70 dark:text-rose-300'
+                          }`}
+                        >
+                          {editingApp.isEnabled !== false ? 'وضعیت: فعال' : 'وضعیت: غیرفعال'}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div
+                      className="flex justify-center p-2.5 sm:p-3 rounded-xl bg-slate-200/30 dark:bg-slate-950/40 border border-dashed border-slate-300/80 dark:border-slate-800/90"
+                      onClickCapture={(e) => {
+                        // Prevent opening link when clicking card in live preview
+                        e.preventDefault();
+                        e.stopPropagation();
+                      }}
+                      title="پیش‌نمایش زنده ظاهر کارت روی صفحه اصلی"
+                    >
+                      <div className="w-full max-w-sm">
+                        <AppCard
+                          app={previewAppObj}
+                          categoryName={selectedCategoryName}
+                          layoutView="grid"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
+
               {/* 1. Basic Info Section */}
               <div className="p-4 rounded-2xl bg-slate-50/70 dark:bg-slate-950/50 border border-slate-200/80 dark:border-slate-800/80 space-y-3.5">
                 <div className="flex items-center gap-1.5 text-slate-900 dark:text-slate-100 font-bold text-xs pb-1 border-b border-slate-200/50 dark:border-slate-800/50">
@@ -4222,8 +4351,8 @@ echo "DATA_DIR=/opt/homelab-data" >> .env
                           : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
                       }`}
                     >
-                      <FileText className="w-3.5 h-3.5" />
-                      <span>فایل PDF / سرور</span>
+                      <Folder className="w-3.5 h-3.5 text-rose-500" />
+                      <span>فایل، سند یا تصویر سرور</span>
                     </button>
                   </div>
                 </div>
@@ -4323,7 +4452,7 @@ echo "DATA_DIR=/opt/homelab-data" >> .env
                         type="file"
                         ref={appDocumentInputRef}
                         onChange={handleUploadAppDocument}
-                        accept=".pdf,application/pdf,.doc,.docx,.xls,.xlsx,.txt,.md,.png,.jpg,.jpeg"
+                        accept=".pdf,application/pdf,.doc,.docx,.xls,.xlsx,.html,.htm,.txt,.md,.png,.jpg,.jpeg,.webp,.gif,.svg,.avif,.bmp,.ico"
                         className="hidden"
                       />
                       <button
