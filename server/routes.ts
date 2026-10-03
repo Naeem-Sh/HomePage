@@ -188,6 +188,9 @@ router.get('/public/config', (req: Request, res: Response) => {
       customFooterText: settings.customFooterText,
       showTelemetryBar: settings.showTelemetryBar !== undefined ? settings.showTelemetryBar : true,
       telemetryPosition: settings.telemetryPosition || 'top',
+      splashEnabled: settings.splashEnabled !== undefined ? settings.splashEnabled : true,
+      splashStyle: settings.splashStyle || 'cyber_shimmer',
+      splashDuration: settings.splashDuration || 1500,
       configVersion: settings.configVersion
     },
     system: {

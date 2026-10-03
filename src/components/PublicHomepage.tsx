@@ -32,7 +32,6 @@ import { AmbientSpatialBackground } from './AmbientSpatialBackground';
 import { BgThemePicker } from './BgThemePicker';
 import { CommandPalette } from './CommandPalette';
 import { ServiceDetailModal } from './ServiceDetailModal';
-import { TelemetryDashboard } from './TelemetryDashboard';
 import { api } from '../lib/api';
 import { getStoredBgTheme, setStoredBgTheme, BG_THEMES } from '../lib/bgThemes';
 import { sanitizePublicAddress } from '../lib/networkUtils';
@@ -87,10 +86,10 @@ export const PublicHomepage: React.FC<PublicHomepageProps> = ({
   const [selectedAppForDetail, setSelectedAppForDetail] = useState<Application | null>(null);
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
 
-  // Layout View Mode (Grid vs List) with localStorage persistence
+  // Layout View Mode (Table/List vs Cards/Grid) with localStorage persistence - default is 'list' (جدولی)
   const [layoutView, setLayoutView] = useState<'grid' | 'list'>(() => {
     const saved = localStorage.getItem('linxdash_layout_view');
-    return saved === 'list' || saved === 'grid' ? saved : 'grid';
+    return saved === 'grid' || saved === 'list' ? saved : 'list';
   });
 
   const handleSetLayoutView = (view: 'grid' | 'list') => {
@@ -283,28 +282,25 @@ export const PublicHomepage: React.FC<PublicHomepageProps> = ({
       ? favoriteApps
       : activeApps.filter((app) => app.categoryId === selectedCategoryId);
 
-  // Dynamic responsive grid column configuration with Ultra-wide / 2K / 4K / 32:9 automatic scaling
+  // Dynamic responsive grid column configuration strictly honoring user-configured gridColumns in both Grid and List modes
   const getGridColsClass = () => {
-    if (layoutView === 'list') {
-      return 'grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 min-[1920px]:grid-cols-5 min-[2560px]:grid-cols-6';
-    }
-    const cols = safeSettings.gridColumns || 4;
+    const cols = Number(safeSettings.gridColumns) || 4;
     switch (cols) {
       case 2:
-        return 'grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-3 min-[1920px]:grid-cols-4 min-[2560px]:grid-cols-5';
+        return 'grid-cols-1 sm:grid-cols-2 app-grid-cols-2';
       case 3:
-        return 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3 2xl:grid-cols-4 min-[1920px]:grid-cols-5 min-[2560px]:grid-cols-6';
+        return 'grid-cols-1 sm:grid-cols-2 md:grid-cols-3 app-grid-cols-3';
       case 5:
-        return 'grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 min-[1920px]:grid-cols-7 min-[2560px]:grid-cols-8 min-[3200px]:grid-cols-10';
+        return 'grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 app-grid-cols-5';
       case 6:
-        return 'grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 2xl:grid-cols-7 min-[1920px]:grid-cols-8 min-[2560px]:grid-cols-10 min-[3200px]:grid-cols-12';
+        return 'grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 app-grid-cols-6';
       case 7:
-        return 'grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 2xl:grid-cols-7 min-[1920px]:grid-cols-9 min-[2560px]:grid-cols-11 min-[3200px]:grid-cols-12';
+        return 'grid-cols-1 sm:grid-cols-2 md:grid-cols-4 lg:grid-cols-7 app-grid-cols-7';
       case 8:
-        return 'grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 2xl:grid-cols-8 min-[1920px]:grid-cols-10 min-[2560px]:grid-cols-12';
+        return 'grid-cols-1 sm:grid-cols-2 md:grid-cols-4 lg:grid-cols-8 app-grid-cols-8';
       case 4:
       default:
-        return 'grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-5 min-[1920px]:grid-cols-6 min-[2560px]:grid-cols-7 min-[3200px]:grid-cols-8';
+        return 'grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 app-grid-cols-4';
     }
   };
 
@@ -464,28 +460,14 @@ export const PublicHomepage: React.FC<PublicHomepageProps> = ({
 
           {/* Right Header Toolbar: Theme, Layout & Admin Icon */}
           <div className="flex items-center gap-2 sm:gap-3">
-            {/* Grid / List View Toggle */}
+            {/* View Mode Toggle: Table (جدولی) vs Cards (کارتی) */}
             <div className="flex items-center bg-slate-200/70 dark:bg-white/[0.06] p-1 rounded-2xl border border-slate-300/80 dark:border-white/[0.12] backdrop-blur-md shadow-xs">
-              <button
-                type="button"
-                id="view-mode-grid-button"
-                onClick={() => handleSetLayoutView('grid')}
-                title="نمای شبکه‌ای"
-                aria-label="نمای شبکه‌ای"
-                className={`p-1.5 rounded-xl transition-all duration-150 cursor-pointer min-h-[30px] min-w-[30px] flex items-center justify-center ${
-                  layoutView === 'grid'
-                    ? 'bg-white dark:bg-gradient-to-r dark:from-blue-600 dark:to-indigo-600 text-slate-900 dark:text-white shadow-xs font-bold'
-                    : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-                }`}
-              >
-                <LayoutGrid className="w-3.5 h-3.5" />
-              </button>
               <button
                 type="button"
                 id="view-mode-list-button"
                 onClick={() => handleSetLayoutView('list')}
-                title="نمای فهرستی"
-                aria-label="نمای فهرستی"
+                title="نمای جدولی (پیش‌فرض)"
+                aria-label="نمای جدولی"
                 className={`p-1.5 rounded-xl transition-all duration-150 cursor-pointer min-h-[30px] min-w-[30px] flex items-center justify-center ${
                   layoutView === 'list'
                     ? 'bg-white dark:bg-gradient-to-r dark:from-blue-600 dark:to-indigo-600 text-slate-900 dark:text-white shadow-xs font-bold'
@@ -493,6 +475,20 @@ export const PublicHomepage: React.FC<PublicHomepageProps> = ({
                 }`}
               >
                 <List className="w-3.5 h-3.5" />
+              </button>
+              <button
+                type="button"
+                id="view-mode-grid-button"
+                onClick={() => handleSetLayoutView('grid')}
+                title="نمای کارتی"
+                aria-label="نمای کارتی"
+                className={`p-1.5 rounded-xl transition-all duration-150 cursor-pointer min-h-[30px] min-w-[30px] flex items-center justify-center ${
+                  layoutView === 'grid'
+                    ? 'bg-white dark:bg-gradient-to-r dark:from-blue-600 dark:to-indigo-600 text-slate-900 dark:text-white shadow-xs font-bold'
+                    : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                }`}
+              >
+                <LayoutGrid className="w-3.5 h-3.5" />
               </button>
             </div>
 
@@ -588,9 +584,6 @@ export const PublicHomepage: React.FC<PublicHomepageProps> = ({
             />
           </div>
         </motion.section>
-
-        {/* Telemetry Dashboard: Active Sessions, Top 3 Used Apps & Daily Visits Tracking */}
-        <TelemetryDashboard mode="public" applications={applications} />
 
         {/* Category Navigation Pills */}
         {(categories.length > 0 || favoriteApps.length > 0) && (

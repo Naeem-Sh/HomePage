@@ -199,3 +199,27 @@
 ::-webkit-scrollbar-thumb:hover {
   background: rgba(150, 150, 150, 0.45);
 }
+
+/* ========================================================================= */
+/* Exact User-Configured Grid Columns Layout (Strict Dynamic Column Grid) */
+/* ========================================================================= */
+@media (min-width: 1024px) {
+  .app-grid-cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
+  .app-grid-cols-3 { grid-template-columns: repeat(3, minmax(0, 1fr)) !important; }
+  .app-grid-cols-4 { grid-template-columns: repeat(4, minmax(0, 1fr)) !important; }
+  .app-grid-cols-5 { grid-template-columns: repeat(5, minmax(0, 1fr)) !important; }
+  .app-grid-cols-6 { grid-template-columns: repeat(6, minmax(0, 1fr)) !important; }
+  .app-grid-cols-7 { grid-template-columns: repeat(7, minmax(0, 1fr)) !important; }
+  .app-grid-cols-8 { grid-template-columns: repeat(8, minmax(0, 1fr)) !important; }
+}
+
+@media (min-width: 640px) and (max-width: 1023px) {
+  .app-grid-cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
+  .app-grid-cols-3 { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
+  .app-grid-cols-4 { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
+  .app-grid-cols-5 { grid-template-columns: repeat(3, minmax(0, 1fr)) !important; }
+  .app-grid-cols-6 { grid-template-columns: repeat(3, minmax(0, 1fr)) !important; }
+  .app-grid-cols-7 { grid-template-columns: repeat(4, minmax(0, 1fr)) !important; }
+  .app-grid-cols-8 { grid-template-columns: repeat(4, minmax(0, 1fr)) !important; }
+}
+

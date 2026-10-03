@@ -8,47 +8,28 @@ import * as XLSX from 'xlsx';
 import { DatabaseSchema, User, Category, Application, SystemSettings, AuditLog, BackupItem, ActivityStats } from './types';
 
 /**
- * Resolves the persistent data storage directory:
- * 1. Explicit DATA_DIR environment variable (e.g. DATA_DIR=/opt/homelab-data or /var/lib/homelab-data)
- * 2. Local configuration file: .datadir or data-dir.conf
- * 3. Default fallback: ./data in the current working directory
+ * Resolves the standardized persistent data storage directory:
+ * 1. Explicit DATA_DIR environment variable (e.g. DATA_DIR=/app/data)
+ * 2. Fallback to /app/data when container runtime directory exists
+ * 3. Default local development fallback: ./data
  */
 function resolveDataDir(): string {
   if (process.env.DATA_DIR && process.env.DATA_DIR.trim()) {
     return path.resolve(process.env.DATA_DIR.trim());
   }
 
-  const portalDataDir = path.join(process.cwd(), 'portal_shiraz_data');
-  if (fs.existsSync(portalDataDir)) {
-    return portalDataDir;
+  if (fs.existsSync('/app/data')) {
+    return '/app/data';
   }
 
-  const configFiles = [
-    path.join(process.cwd(), '.datadir'),
-    path.join(process.cwd(), 'data-dir.conf')
-  ];
-
-  for (const cf of configFiles) {
-    if (fs.existsSync(cf)) {
-      try {
-        const line = fs.readFileSync(cf, 'utf-8').trim().split('\n')[0].trim();
-        if (line && !line.startsWith('#')) {
-          return path.resolve(line);
-        }
-      } catch {
-        // ignore error and try next
-      }
-    }
-  }
-
-  return path.join(process.cwd(), 'data');
+  return path.resolve(process.cwd(), 'data');
 }
 
 const DATA_DIR = resolveDataDir();
-const UPLOADS_DIR = process.env.UPLOADS_DIR || path.join(DATA_DIR, 'uploads');
-const BACKUPS_DIR = process.env.BACKUPS_DIR || path.join(DATA_DIR, 'backups');
-const DB_FILE = process.env.DB_FILE || path.join(DATA_DIR, 'database.json');
-const VISITS_FILE = process.env.VISITS_FILE || path.join(DATA_DIR, 'visits.json');
+const UPLOADS_DIR = path.join(DATA_DIR, 'uploads');
+const BACKUPS_DIR = path.join(DATA_DIR, 'backups');
+const DB_FILE = path.join(DATA_DIR, 'database.json');
+const VISITS_FILE = path.join(DATA_DIR, 'visits.json');
 
 // Ensure target directories exist safely
 try {
@@ -436,6 +417,9 @@ const DEFAULT_SETTINGS: SystemSettings = {
   customFooterText: 'Developed by : N.Shaaeri',
   showTelemetryBar: true,
   telemetryPosition: 'top',
+  splashEnabled: true,
+  splashStyle: 'cyber_shimmer',
+  splashDuration: 1500,
   configVersion: generateVersionHash()
 };
 
@@ -585,7 +569,9 @@ class DatabaseService {
 
   private ensureDefaultUsers() {
     const salt = bcrypt.genSaltSync(10);
-    const envUser = (process.env.INITIAL_ADMIN_USER && process.env.INITIAL_ADMIN_USER.trim()) || 'admin';
+    const envUser = (process.env.INITIAL_ADMIN_USERNAME && process.env.INITIAL_ADMIN_USERNAME.trim()) ||
+                    (process.env.INITIAL_ADMIN_USER && process.env.INITIAL_ADMIN_USER.trim()) ||
+                    'admin';
     const envPass = process.env.INITIAL_ADMIN_PASSWORD || '123';
 
     // 1. Remove duplicate users with same username (case-insensitive)

@@ -1,156 +1,115 @@
-# 🌐 پورتال سازمانی و داشبورد هوم‌لب (Portal Shiraz / Homelab Dashboard)
+# Portal Shiraz (Homelab & Enterprise Dashboard)
 
-یک پورتال مدرن، زیبا، سبک و پرسرعت برای مدیریت و دسترسی یکپارچه به سامانه‌ها، سرورها، خدمات و فایل‌های سازمانی با طراحی الهام‌گرفته از سیستم‌عامل macOS و پنل مدیریت پیشرفته.
+A modern, high-performance, and air-gapped web portal designed for unified navigation, service management, and homelab/intranet application routing. Built with React 19, TypeScript, Tailwind CSS, and a lightweight standalone Express backend.
 
 ---
 
-## 🚀 راه‌اندازی سریع با داکر (Docker & Docker Compose)
+## 🔒 Air-Gapped & Offline Runtime Guarantee
 
-این پروژه کاملاً کانتینریزه شده و دارای بیلد چندمرحله‌ای بهینه (Multi-stage build) بر پایه `Node.js 22 Alpine` است.
+- **Zero Outbound Runtime Network Calls:** The container operates in completely isolated intranet environments without external DNS resolution or public internet access.
+- **Locally Bundled Assets:** All typography (Vazirmatn fonts), icons (Lucide React vector suite), styles, and client assets are compiled and bundled directly into static artifacts.
+- **Self-Contained Probes:** Health checks (`/healthz`) query internal loopback addresses with zero third-party dependencies.
 
-### پیش‌نیازها
-- نصب [Docker Engine](https://docs.docker.com/engine/install/)
-- نصب [Docker Compose](https://docs.docker.com/compose/install/)
+---
 
-### ۱. اجرای مستقیم با Docker Compose (پیشنهادی)
-تنها با اجرای دستور زیر در پوشه پروژه، کل سامانه بیلد شده و روی پورت `4500` اجرا می‌شود:
+## ⚡ Quick Start (Single-Command Launch)
+
+Deploy the production container with persistent storage and automatic healthchecks:
 
 ```bash
 docker compose up -d --build
 ```
 
-پس از بالا آمدن کانتینر، سامانه در آدرس زیر در دسترس است:
+Access the web portal in your browser:
 👉 **http://localhost:4500**
 
-برای مشاهده لاگ‌های اجرای سرور:
-```bash
-docker compose logs -f
-```
+---
 
-برای توقف سرویس:
-```bash
-docker compose down
-```
+## 🔑 Default Credentials
+
+- **Username:** `admin`
+- **Password:** `123`
+- **Access Point:** Click the lock icon in the top header or navigate to the admin dashboard.
 
 ---
 
-### ۲. اجرای مستقل با Dockerfile (بدون Compose)
+## 🌐 Port & Network Mapping
 
-```bash
-# بیلد ایمیج داکر
-docker build -t portal-shiraz:latest .
+| Port (Host:Container) | Protocol | Purpose |
+| :--- | :--- | :--- |
+| `4500:4500` | HTTP / TCP | Application web interface and REST API |
 
-# اجرای کانتینر با مانت کردن ولوم ماندگاری داده‌ها در دایرکتوری اختصاصی خارج از کانتینر
-docker run -d \
-  --name portal_shiraz_app \
-  -p 4500:4500 \
-  -v $(pwd)/portal_shiraz_data:/app/data \
-  --restart unless-stopped \
-  portal-shiraz:latest
-```
+To change the exposed port, modify the `ports` mapping in `docker-compose.yml` or set `PORT` in your `.env` file.
 
 ---
 
-## 🔄 همگام‌سازی با گیت‌هاب (GitHub Sync & Push)
+## 💾 Persistent Storage & Volume Mapping
 
-برای ایجاد یا اتصال این مخزن به گیت‌هاب شخصی یا سازمانی خود، مراحل ساده زیر را دنبال کنید:
+All dynamic configuration, databases, uploads, and backups are stored outside the container on the host filesystem:
 
-### گام اول: مقداردهی اولیه گیت (در صورت نیاز)
-```bash
-git init
-git add .
-git commit -m "Initial commit: Dockerized Portal Shiraz dashboard ready for production"
+```yaml
+volumes:
+  - ./data:/app/data
+  - /etc/localtime:/etc/localtime:ro
 ```
 
-### گام دوم: اتصال به مخزن گیت‌هاب (Remote Origin)
-مخزن جدیدی در حساب کاربری GitHub خود بسازید (بدون اضافه کردن README یا .gitignore پیش‌فرض)، سپس:
-
-```bash
-# نام شاخه اصلی به main
-git branch -M main
-
-# افزودن آدرس مخزن گیت‌هاب شما (آدرس مخزن خود را جایگزین کنید)
-git remote add origin https://github.com/YOUR_USERNAME/YOUR_REPOSITORY.git
-
-# ارسال کدها به گیت‌هاب
-git push -u origin main
-```
-
-### گام سوم: دریافت آخرین تغییرات از گیت‌هاب در سرور
-هر زمان که در سرور یا محیط جدید کدهای مخزن را دریافت کردید:
-```bash
-git pull origin main
-docker compose up -d --build
-```
+- `./data/database.json`: Applications, categories, users, and layout configuration.
+- `./data/visits.json`: Daily and active telemetry visit counters.
+- `./data/uploads/`: Uploaded documents, logos, icons, and wallpapers.
+- `./data/backups/`: Automated and manual ZIP database backups.
 
 ---
 
-## 💾 دایرکتوری اختصاصی داده‌ها خارج از کانتینر (Data Persistence & Backup)
+## ⚙️ Environment Configuration
 
-تمامی داده‌ها، تنظیمات، فایل‌های دیتابیس JSON، تصاویر و لوگوهای آپلود شده و فایل‌های پشتیبان در پوشه اختصاصی `./portal_shiraz_data` در هاست شما (خارج از کانتینر) ذخیره می‌شوند:
-
-- `portal_shiraz_data/database.json`: پایگاه داده سامانه‌ها، دسته‌بندی‌ها، کاربران و تنظیمات پورتال
-- `portal_shiraz_data/visits.json`: شمارنده آمار بازدیدها
-- `portal_shiraz_data/uploads/`: فایل‌ها، مستندات PDF و لوگوهای آپلودشده
-- `portal_shiraz_data/backups/`: فایل‌های پشتیبان زیپ ایجادشده از پنل مدیریت
-
-> 🔒 **امنیت:** پوشه `portal_shiraz_data` در فایل `.gitignore` قرار داده شده تا اطلاعات واقعی سرور یا کاربران هرگز به اشتباه در گیت‌هاب عمومی بارگذاری نشوند.
-
----
-
-## 🔑 اطلاعات ورود پیش‌فرض به پنل مدیریت
-
-- **نام کاربری:** `admin`
-- **رمز عبور:** `123`
-- **نکته مهم:** **هیچ الزامی به تغییر رمز عبور در اولین ورود وجود ندارد.** سیستم به‌صورت خودکار آماده به کار بوده و در صورت تمایل، هر زمان می‌توانید از تب «مدیریت کاربران» در پنل، رمز عبور را ویرایش فرمایید.
-- **آدرس ورود:** آیکون قفل در گوشه هدر یا مسیر `/` و کلیک روی دکمه ورود مدیریت
-
----
-
-## ⚙️ متغیرهای محیطی (Environment Variables)
-
-می‌توانید فایل `.env.example` را به `.env` کپی کرده و تنظیمات را شخصی‌سازی کنید:
+Copy `.env.example` to `.env` to customize settings:
 
 ```bash
 cp .env.example .env
 ```
 
-| متغیر | مقدار پیش‌فرض | توضیحات |
+| Variable | Default Value | Description |
 | :--- | :--- | :--- |
-| `PORT` | `4500` | پورت وب‌سرور داخل کانتینر و هاست |
-| `NODE_ENV` | `production` | حالت اجرای سرور |
-| `JWT_SECRET` | رشته تصادفی | کلید امنیتی امضای توکن‌های احراز هویت ادمین |
-| `INITIAL_ADMIN_USER` | `admin` | نام کاربری اولیه مدیر در صورت خالی بودن دیتابیس |
-| `INITIAL_ADMIN_PASSWORD` | `123` | رمز عبور اولیه مدیر |
-| `RESET_ADMIN_PASSWORD` | `false` | در صورت تنظیم روی `true`، رمز عبور مدیر ریست می‌شود |
-| `DATA_DIR` | `/app/data` | مسیر ذخیره‌سازی داده‌های دائمی در کانتینر |
+| `PORT` | `4500` | HTTP listener port |
+| `NODE_ENV` | `production` | Node runtime environment |
+| `TZ` | `Asia/Tehran` | Timezone for system logs and audit trail |
+| `JWT_SECRET` | `shiraz_portal_jwt_secret_token_2026` | Token signing secret for sessions |
+| `INITIAL_ADMIN_USERNAME` | `admin` | Bootstrap admin username |
+| `INITIAL_ADMIN_PASSWORD` | `123` | Bootstrap admin password |
+| `RESET_ADMIN_PASSWORD` | `false` | Force reset admin password on restart if `true` |
+| `DATA_DIR` | `/app/data` | Standardized database and assets root directory |
 
 ---
 
-## 🛠️ توسعه و اجرای محلی (بدون داکر)
+## 🛠️ Local Development (Without Docker)
 
 ```bash
-# نصب پکیج‌ها
+# 1. Install dependencies
 npm install
 
-# اجرای حالت توسعه با لایو ریلود
+# 2. Start development server with live reload
 npm run dev
 
-# بررسی سلامت کدها (Linting)
+# 3. Static type check
 npm run lint
 
-# بیلد نهایی سرور و فرانت‌اند
+# 4. Production build
 npm run build
 
-# اجرای سرور پروداکشن بیلد شده
+# 5. Start compiled production server
 npm start
 ```
 
 ---
 
-## 📋 ویژگی‌های کلیدی سامانه
-- 🎨 رابط کاربری فوق‌العاده سریع با Tailwind CSS v4 و فونت وزیرمتن فارسی
-- 🌓 پشتیبانی خودکار و دستی از حالت روز (Light) و حالت شب (Dark)
-- 🖥️ پیش‌نمایش زنده و بلادرنگ هدر، لوگو و عنوان در پنل مدیریت
-- 📦 آیکون‌های وکتور اختصاصی SVG داخلی برای انواع سرویس‌های هوم‌لب، شبکه و لینوکس
-- 📊 سیستم پایش سلامت سرویس‌ها، مانیتورینگ تلمتری، و پشتیبان‌گیری کامل در فایل ZIP و Excel
+## 🩺 Health Check & Monitoring
+
+- **Endpoint:** `GET /healthz` or `GET /api/health`
+- **Response:** `200 OK` with JSON payload `{ "status": "ok", "timestamp": "..." }`
+- **Docker Healthcheck:** Automatically executed every 30 seconds via internal `wget`.
+
+---
+
+## 📄 License
+
+MIT License. Developed for enterprise intranet, homelab, and air-gapped organizational portal management.

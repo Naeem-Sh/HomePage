@@ -230,7 +230,7 @@ export const AppCard: React.FC<AppCardProps> = ({
       >
         <div className="flex items-center gap-3 min-w-0 flex-1 relative z-10">
           {/* Edit Mode Handle or Move Controls */}
-          {isEditMode ? (
+          {isEditMode && (
             <div className="flex items-center gap-1 shrink-0">
               <div className="p-1 text-blue-400 cursor-grab">
                 <GripVertical className="w-4 h-4" />
@@ -264,22 +264,6 @@ export const AppCard: React.FC<AppCardProps> = ({
                 </div>
               )}
             </div>
-          ) : (
-            onToggleFavorite && (
-              <button
-                type="button"
-                onClick={(e) => onToggleFavorite(app.id, e)}
-                title={isFavorite ? 'حذف از دسترسی سریع' : 'پین کردن به دسترسی سریع'}
-                aria-label={isFavorite ? 'حذف از دسترسی سریع' : 'پین کردن به دسترسی سریع'}
-                className={`p-1.5 rounded-xl transition-all duration-200 cursor-pointer shrink-0 min-h-[34px] min-w-[34px] flex items-center justify-center ${
-                  isFavorite
-                    ? 'text-amber-400 opacity-100 drop-shadow-[0_0_6px_rgba(251,191,36,0.4)]'
-                    : 'text-slate-400 opacity-30 hover:opacity-100 hover:text-amber-400 hover:bg-amber-400/10'
-                }`}
-              >
-                <Star className={`w-3.5 h-3.5 ${isFavorite ? 'fill-amber-400 text-amber-400' : ''}`} />
-              </button>
-            )
           )}
 
           {/* App Icon with subtle glass frame */}
@@ -296,7 +280,7 @@ export const AppCard: React.FC<AppCardProps> = ({
             />
           </div>
 
-          {/* Title, Protocol indicator & Description */}
+          {/* Title & Description */}
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2">
               <h3 className="font-bold text-slate-900 dark:text-white text-sm tracking-tight truncate group-hover:text-blue-500 dark:group-hover:text-blue-400 transition-colors">
@@ -332,28 +316,35 @@ export const AppCard: React.FC<AppCardProps> = ({
           </div>
         </div>
 
-        {/* Right Actions: Info Button + Direct Launch Trigger */}
-        <div className="flex items-center gap-1.5 shrink-0 relative z-10 pl-2">
-          {!isEditMode && (
-            <button
-              type="button"
-              onClick={handleOpenInfo}
-              title="مشاهده مشخصات و پروتکل سرویس"
-              className="p-1.5 rounded-xl text-slate-400 hover:text-slate-700 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-white/10 transition-colors cursor-pointer min-h-[34px] min-w-[34px] flex items-center justify-center"
-            >
-              <Info className="w-3.5 h-3.5" />
-            </button>
-          )}
-
-          <div className="p-1.5 rounded-xl text-slate-400 group-hover:text-blue-500 dark:group-hover:text-blue-400 transition-colors">
+        {/* Left Side Vertical Actions: Launch Arrow + Favorite Star (Vertical Column) */}
+        <div className="flex flex-col items-center justify-center gap-1 shrink-0 relative z-10 pl-1">
+          {/* Direct Launch Trigger Arrow */}
+          <div className="p-1 rounded-lg text-slate-400 group-hover:text-blue-500 dark:group-hover:text-blue-400 transition-colors flex items-center justify-center">
             {isUncOrLocal ? (
-              <HardDrive className="w-4 h-4" />
+              <HardDrive className="w-3.5 h-3.5" />
             ) : isPdf ? (
-              <FileText className="w-4 h-4" />
+              <FileText className="w-3.5 h-3.5" />
             ) : (
-              <ArrowUpRight className="w-4 h-4" />
+              <ArrowUpRight className="w-3.5 h-3.5 opacity-70 group-hover:opacity-100" />
             )}
           </div>
+
+          {/* Favorite Star Button (On the Left, Vertically below arrow) */}
+          {!isEditMode && onToggleFavorite && (
+            <button
+              type="button"
+              onClick={(e) => onToggleFavorite(app.id, e)}
+              title={isFavorite ? 'حذف از دسترسی سریع' : 'پین کردن به دسترسی سریع'}
+              aria-label={isFavorite ? 'حذف از دسترسی سریع' : 'پین کردن به دسترسی سریع'}
+              className={`p-1 rounded-lg transition-all duration-200 cursor-pointer flex items-center justify-center ${
+                isFavorite
+                  ? 'text-amber-400 opacity-100 drop-shadow-[0_0_6px_rgba(251,191,36,0.5)]'
+                  : 'text-slate-400 opacity-30 hover:opacity-100 hover:text-amber-400 hover:bg-amber-400/10'
+              }`}
+            >
+              <Star className={`w-3.5 h-3.5 ${isFavorite ? 'fill-amber-400 text-amber-400' : ''}`} />
+            </button>
+          )}
         </div>
       </div>
     );
@@ -456,33 +447,8 @@ export const AppCard: React.FC<AppCardProps> = ({
               </div>
             </div>
           ) : (
-            <>
-              {onToggleFavorite && (
-                <button
-                  type="button"
-                  onClick={(e) => onToggleFavorite(app.id, e)}
-                  title={isFavorite ? 'حذف از نشان‌شده‌ها' : 'افزودن به نشان‌شده‌ها'}
-                  aria-label={isFavorite ? 'حذف از نشان‌شده‌ها' : 'افزودن به نشان‌شده‌ها'}
-                  className={`p-1.5 rounded-xl transition-all duration-150 cursor-pointer min-h-[34px] min-w-[34px] flex items-center justify-center ${
-                    isFavorite
-                      ? 'text-amber-400 opacity-100 drop-shadow-[0_0_6px_rgba(251,191,36,0.5)]'
-                      : 'text-slate-400 opacity-25 hover:opacity-100 hover:text-amber-400 hover:bg-amber-400/10'
-                  }`}
-                >
-                  <Star className={`w-4 h-4 ${isFavorite ? 'fill-amber-400 text-amber-400' : ''}`} />
-                </button>
-              )}
-
-              <button
-                type="button"
-                onClick={handleOpenInfo}
-                title="مشاهده اطلاعات و پروتکل سرویس"
-                className="p-1.5 rounded-xl text-slate-400 hover:text-slate-700 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-white/10 transition-colors opacity-40 hover:opacity-100 cursor-pointer min-h-[34px] min-w-[34px] flex items-center justify-center"
-              >
-                <Info className="w-3.5 h-3.5" />
-              </button>
-
-              <div className="p-1.5 rounded-xl text-slate-400 group-hover:text-blue-500 dark:group-hover:text-blue-400 transition-colors">
+            <div className="flex flex-col items-center justify-center gap-0.5">
+              <div className="p-1 rounded-lg text-slate-400 group-hover:text-blue-500 dark:group-hover:text-blue-400 transition-colors flex items-center justify-center">
                 {isUncOrLocal ? (
                   <HardDrive className="w-4 h-4" />
                 ) : isImageFile ? (
@@ -493,39 +459,37 @@ export const AppCard: React.FC<AppCardProps> = ({
                   <ArrowUpRight className="w-4 h-4 opacity-70 group-hover:opacity-100" />
                 )}
               </div>
-            </>
+
+              {onToggleFavorite && (
+                <button
+                  type="button"
+                  onClick={(e) => onToggleFavorite(app.id, e)}
+                  title={isFavorite ? 'حذف از نشان‌شده‌ها' : 'افزودن به نشان‌شده‌ها'}
+                  aria-label={isFavorite ? 'حذف از نشان‌شده‌ها' : 'افزودن به نشان‌شده‌ها'}
+                  className={`p-1 rounded-lg transition-all duration-150 cursor-pointer flex items-center justify-center ${
+                    isFavorite
+                      ? 'text-amber-400 opacity-100 drop-shadow-[0_0_6px_rgba(251,191,36,0.5)]'
+                      : 'text-slate-400 opacity-25 hover:opacity-100 hover:text-amber-400 hover:bg-amber-400/10'
+                  }`}
+                >
+                  <Star className={`w-3.5 h-3.5 ${isFavorite ? 'fill-amber-400 text-amber-400' : ''}`} />
+                </button>
+              )}
+            </div>
           )}
         </div>
       </div>
 
-      {/* Bottom Area: Protocol Badge + Real-time Ping Latency + Name & Description */}
+      {/* Bottom Area: Name, LED status & Description */}
       <div className="mt-3.5 pt-1 relative z-10">
-        <div className="flex items-center justify-between gap-2 mb-1.5">
-          <div className="flex items-center gap-1.5 min-w-0">
-            <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider truncate">
-              {isUncOrLocal
-                ? 'اشتراک شبکه'
-                : isPdf
-                ? 'سند PDF'
-                : isImageFile
-                ? `تصویر ${fileExt.toUpperCase()}`
-                : isWord
-                ? 'سند Word'
-                : isExcel
-                ? 'شیت Excel'
-                : isHtml
-                ? 'صفحه HTML'
-                : isAttachedFile || isFileUrl
-                ? 'سند و فایل'
-                : isHttps
-                ? 'امن HTTPS'
-                : 'پروتکل HTTP'}
-            </span>
-          </div>
+        <div className="flex items-center gap-2 mb-1">
+          <h3 className="font-black text-slate-900 dark:text-white text-base sm:text-lg tracking-tight truncate group-hover:text-blue-500 dark:group-hover:text-blue-400 transition-colors">
+            {app.name}
+          </h3>
 
           {/* Pulsing Status LED Indicator (No words) */}
           <span
-            className="relative flex h-2 w-2 shrink-0 items-center justify-center"
+            className="relative flex h-2 w-2 shrink-0 items-center justify-center my-auto"
             title={`وضعیت سرویس: ${
               health.status === 'online' ? 'فعال' : health.status === 'degraded' ? 'کند' : 'قطع'
             }`}
@@ -544,10 +508,6 @@ export const AppCard: React.FC<AppCardProps> = ({
             />
           </span>
         </div>
-
-        <h3 className="font-black text-slate-900 dark:text-white text-base sm:text-lg tracking-tight truncate group-hover:text-blue-500 dark:group-hover:text-blue-400 transition-colors">
-          {app.name}
-        </h3>
 
         {app.description && (
           <p className="text-xs text-slate-500 dark:text-slate-400 line-clamp-2 mt-1 leading-relaxed font-normal">

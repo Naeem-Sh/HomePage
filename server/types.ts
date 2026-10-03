@@ -66,6 +66,13 @@ export interface ActivityStats {
   todayVisits: number;
 }
 
+export type SplashStyle =
+  | 'cyber_shimmer'
+  | 'neon_pulse'
+  | 'matrix_tech'
+  | 'cosmic_glow'
+  | 'minimal_drift';
+
 export interface SystemSettings {
   title: string;
   subtitle: string;
@@ -84,6 +91,9 @@ export interface SystemSettings {
   customFooterText?: string;
   showTelemetryBar?: boolean;
   telemetryPosition?: 'top' | 'bottom';
+  splashEnabled?: boolean;
+  splashStyle?: SplashStyle;
+  splashDuration?: number;
   configVersion: string;
 }
 

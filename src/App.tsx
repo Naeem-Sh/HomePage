@@ -2,11 +2,12 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { PublicConfig, ThemeMode, Application, AuthResponse } from './types';
 import { api, getStoredToken, removeStoredToken, setStoredToken } from './lib/api';
 import { PublicHomepage } from './components/PublicHomepage';
-import { AdminDashboard } from './components/AdminDashboard';
-import { SetupWizard } from './components/SetupWizard';
 import { AuthModal } from './components/AuthModal';
 import { DashboardSwitcher } from './components/DashboardSwitcher';
 import { ThemeToggle } from './components/ThemeToggle';
+import { SplashIntro } from './components/SplashIntro';
+import { AdminDashboard } from './components/AdminDashboard';
+import { SetupWizard } from './components/SetupWizard';
 import { updateFaviconAndTitle } from './lib/favicon';
 import { Server, RefreshCw, Lock, User, KeyRound, LogIn, ArrowLeft, Shield, Eye, EyeOff } from 'lucide-react';
 
@@ -24,6 +25,13 @@ export default function App() {
   const [userApplications, setUserApplications] = useState<Application[] | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [showSplash, setShowSplash] = useState(() => {
+    try {
+      return !sessionStorage.getItem('iooc_splash_shown');
+    } catch {
+      return true;
+    }
+  });
 
   const [viewMode, setViewMode] = useState<'home' | 'admin'>('home');
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
@@ -122,20 +130,19 @@ export default function App() {
     loadInitialData();
   };
 
-  // 1. Initial Loading Screen
+  // 1. Initial Loading Screen before publicConfig arrives
   if (isLoading && !publicConfig) {
-    return (
-      <div className="min-h-screen bg-slate-50 dark:bg-[#070b14] text-slate-900 dark:text-slate-100 flex flex-col items-center justify-center p-4" dir="rtl">
-        <div className="flex flex-col items-center gap-3">
-          <div className="w-12 h-12 rounded-2xl bg-blue-600/10 dark:bg-blue-500/20 text-blue-600 dark:text-blue-400 border border-blue-500/20 flex items-center justify-center animate-pulse">
-            <Server className="w-6 h-6" />
-          </div>
-          <p className="text-xs font-semibold text-slate-500 dark:text-slate-400">
-            در حال اتصال به دیمن هوم‌لب لینوکس...
-          </p>
-        </div>
-      </div>
-    );
+    let alreadyShown = false;
+    try {
+      alreadyShown = Boolean(sessionStorage.getItem('iooc_splash_shown'));
+    } catch {
+      alreadyShown = false;
+    }
+
+    if (!alreadyShown) {
+      return <SplashIntro minDurationMs={1000} />;
+    }
+    return <div className="min-h-screen bg-slate-50 dark:bg-[#070b14]" />;
   }
 
   // 2. Fatal Server Error Screen
@@ -197,6 +204,21 @@ export default function App() {
 
   return (
     <div className="min-h-screen">
+      {/* Configurable IOOC Splash Intro Overlay on initial app load (once per session) */}
+      {showSplash && publicConfig?.settings?.splashEnabled !== false && (
+        <SplashIntro
+          minDurationMs={publicConfig?.settings?.splashDuration || 1500}
+          onFinish={() => {
+            setShowSplash(false);
+            try {
+              sessionStorage.setItem('iooc_splash_shown', 'true');
+            } catch {
+              // ignore
+            }
+          }}
+        />
+      )}
+
       {viewMode === 'admin' ? (
         currentUser?.role === 'admin' ? (
           <AdminDashboard

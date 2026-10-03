@@ -1,5 +1,6 @@
 import 'dotenv/config';
 import express from 'express';
+import compression from 'compression';
 import path from 'path';
 import fs from 'fs';
 import { createServer as createViteServer } from 'vite';
@@ -9,6 +10,26 @@ import { db } from './server/db';
 async function startServer() {
   const app = express();
   const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
+
+  // Enable trust proxy for reverse proxy forwarded headers (X-Forwarded-For, X-Forwarded-Proto)
+  app.set('trust proxy', true);
+
+  // Dedicated self-contained health check endpoints for container/orchestration probes
+  app.get(['/healthz', '/api/health'], (_req, res) => {
+    res.status(200).json({ status: 'ok', timestamp: new Date().toISOString() });
+  });
+
+  // High-performance compression middleware for Gzip/Deflate transfer
+  app.use(compression({
+    level: 6,
+    threshold: 1024,
+    filter: (req, res) => {
+      if (req.headers['x-no-compression']) {
+        return false;
+      }
+      return compression.filter(req, res);
+    }
+  }));
 
   // Security headers & basic response tuning
   app.use((_req, res, next) => {

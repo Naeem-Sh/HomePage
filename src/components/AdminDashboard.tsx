@@ -69,7 +69,8 @@ import {
   BackupItem,
   BackupInspection,
   ActivityStats,
-  APP_VERSION
+  APP_VERSION,
+  SplashStyle
 } from '../types';
 import { api, setStoredToken } from '../lib/api';
 import { toPersianDigits, formatPersianDate, formatBytes } from '../lib/utils';
@@ -80,10 +81,9 @@ import { IconPickerModal } from './IconPickerModal';
 import { ThemeToggle } from './ThemeToggle';
 import { BgThemePicker } from './BgThemePicker';
 import { getStoredBgTheme, setStoredBgTheme } from '../lib/bgThemes';
-import { HostTelemetryBar } from './HostTelemetryBar';
 import { DashboardSwitcher } from './DashboardSwitcher';
 import { AnalogClock } from './AnalogClock';
-import { TelemetryDashboard } from './TelemetryDashboard';
+import { SplashIntro } from './SplashIntro';
 import { AdminConsoleBackground, AdminBgStyle } from './AdminConsoleBackground';
 import {
   exportToExcel,
@@ -178,6 +178,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     customFooterText: 'Host: Linux Server',
     showTelemetryBar: true,
     telemetryPosition: 'top',
+    splashEnabled: true,
+    splashStyle: 'cyber_shimmer',
+    splashDuration: 1500,
     configVersion: '1.0.0'
   };
 
@@ -202,6 +205,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const iconDirectInputRef = useRef<HTMLInputElement>(null);
   const [isUploadingIconDirect, setIsUploadingIconDirect] = useState(false);
   const [isIconSectionDragOver, setIsIconSectionDragOver] = useState(false);
+  const [isPreviewingSplash, setIsPreviewingSplash] = useState(false);
 
   // Backup & Activity States
   const [backups, setBackups] = useState<BackupItem[]>([]);
@@ -1382,13 +1386,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         </div>
       </header>
 
-      {/* Admin Host Telemetry Bar */}
-      {systemInfo && (
-        <div className="max-w-7xl w-full mx-auto px-4 sm:px-8 pt-4">
-          <HostTelemetryBar systemInfo={systemInfo} activity={activityStats || stats?.activity} />
-        </div>
-      )}
-
       {/* Main Admin Content with Vertical Sidebar on the Right */}
       <div className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-8 py-4 flex flex-col lg:flex-row gap-6 items-start">
         {/* 1. Vertical Sidebar on the Right (First child in RTL) */}
@@ -1409,7 +1406,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 { id: 'users', label: 'کاربران و دسترسی‌ها', icon: Users, count: users.length },
                 { id: 'appearance', label: 'نام تب، هدر و ظاهر', icon: Palette },
                 { id: 'logs', label: 'گزارش وقایع و لاگ‌ها', icon: ScrollText, count: auditLogs.length },
-                { id: 'system', label: 'پشتیبان‌گیری و داکر', icon: SettingsIcon }
+                { id: 'system', label: 'پشتیبان‌گیری و سیستم', icon: SettingsIcon }
               ].map((tab) => {
                 const Icon = tab.icon;
                 const isActive = activeTab === tab.id;
@@ -1560,71 +1557,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 </div>
               </div>
 
-              {/* Real-time Telemetry Dashboard: Active Sessions, Top 3 Used Apps & Daily Visits */}
-              <TelemetryDashboard mode="admin" systemInfo={systemInfo} applications={applications} />
-
-              {/* System Telemetry & Quick Actions */}
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                {/* System Diagnostics */}
-                <div className="p-5 rounded-2xl bg-white/80 dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800 shadow-xs lg:col-span-2 space-y-4">
-                  <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
-                    <div className="flex items-center gap-2 font-bold text-sm text-slate-900 dark:text-slate-100">
-                      <Activity className="w-4 h-4 text-blue-500" />
-                      <span>محیط و زمان اجرای هاست</span>
-                    </div>
-                    <span className="px-2 py-0.5 rounded-full text-[10px] font-mono bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300">
-                      فعال و در حال اجرا
-                    </span>
-                  </div>
-
-                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-xs">
-                    <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200/60 dark:border-slate-800/60">
-                      <span className="text-slate-400">نسخه نود (Node)</span>
-                      <p className="font-mono font-bold text-slate-800 dark:text-slate-200 mt-1">
-                        {systemInfo?.nodeVersion || 'v22.x'}
-                      </p>
-                    </div>
-                    <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200/60 dark:border-slate-800/60">
-                      <span className="text-slate-400">پلتفرم و معماری</span>
-                      <p className="font-mono font-bold text-slate-800 dark:text-slate-200 mt-1">
-                        {systemInfo?.platform} ({systemInfo?.arch})
-                      </p>
-                    </div>
-                    <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200/60 dark:border-slate-800/60">
-                      <span className="text-slate-400">حافظه Heap مصرفی</span>
-                      <p className="font-mono font-bold text-slate-800 dark:text-slate-200 mt-1">
-                        {systemInfo?.heapUsedMB || 0} مگابایت
-                      </p>
-                    </div>
-                    <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200/60 dark:border-slate-800/60">
-                      <span className="text-slate-400">زمان فعالیت پردازه</span>
-                      <p className="font-mono font-bold text-slate-800 dark:text-slate-200 mt-1">
-                        {Math.floor((systemInfo?.uptimeSeconds || 0) / 60)} دقیقه
-                      </p>
-                    </div>
-                    <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200/60 dark:border-slate-800/60 sm:col-span-2">
-                      <div className="flex items-center justify-between gap-2 mb-1">
-                        <span className="text-slate-400">مسیر ذخیره‌سازی داده‌ها</span>
-                        {systemInfo?.isExternalDataDir ? (
-                          <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-950/70 dark:text-emerald-300 font-bold border border-emerald-300 dark:border-emerald-800 flex items-center gap-1">
-                            ✓ خارج از پوشه پروژه (ایمن در آپدیت)
-                          </span>
-                        ) : (
-                          <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-200 text-slate-700 dark:bg-slate-800 dark:text-slate-300 font-medium">
-                            پوشه داخلی پروژه (./data)
-                          </span>
-                        )}
-                      </div>
-                      <p className="font-mono text-xs font-bold text-slate-800 dark:text-slate-200 truncate" dir="ltr">
-                        {systemInfo?.dataDir || systemInfo?.dbFile || './data/database.json'}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Quick Actions Panel */}
-                <div className="p-5 rounded-2xl bg-white/80 dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800 shadow-xs space-y-3">
-                  <h3 className="font-bold text-sm text-slate-900 dark:text-slate-100">دسترسی‌های سریع</h3>
+              {/* Quick Actions Panel */}
+              <div className="p-5 rounded-2xl bg-white/80 dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800 shadow-xs space-y-3">
+                <h3 className="font-bold text-sm text-slate-900 dark:text-slate-100 flex items-center gap-2">
+                  <Sparkles className="w-4 h-4 text-blue-500" />
+                  <span>دسترسی‌های سریع مدیریتی</span>
+                </h3>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
                   <button
                     onClick={() => {
                       setEditingApp({
@@ -1642,7 +1581,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       });
                       setIsAppModalOpen(true);
                     }}
-                    className="w-full flex items-center justify-between p-2.5 rounded-xl bg-blue-50 hover:bg-blue-100 dark:bg-blue-950/50 dark:hover:bg-blue-900/60 text-blue-700 dark:text-blue-300 text-xs font-semibold transition-colors cursor-pointer"
+                    className="flex items-center justify-between p-3 rounded-xl bg-blue-50 hover:bg-blue-100 dark:bg-blue-950/50 dark:hover:bg-blue-900/60 text-blue-700 dark:text-blue-300 text-xs font-semibold transition-colors cursor-pointer"
                   >
                     <span className="flex items-center gap-2">
                       <Plus className="w-4 h-4" />
@@ -1653,7 +1592,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
                   <button
                     onClick={handleExportExcel}
-                    className="w-full flex items-center justify-between p-2.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/50 dark:hover:bg-emerald-900/60 text-emerald-700 dark:text-emerald-300 text-xs font-semibold transition-colors cursor-pointer"
+                    className="flex items-center justify-between p-3 rounded-xl bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/50 dark:hover:bg-emerald-900/60 text-emerald-700 dark:text-emerald-300 text-xs font-semibold transition-colors cursor-pointer"
                   >
                     <span className="flex items-center gap-2">
                       <FileSpreadsheet className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
@@ -1664,7 +1603,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
                   <button
                     onClick={handleExportJson}
-                    className="w-full flex items-center justify-between p-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-semibold transition-colors cursor-pointer"
+                    className="flex items-center justify-between p-3 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-semibold transition-colors cursor-pointer"
                   >
                     <span className="flex items-center gap-2">
                       <FileJson className="w-4 h-4 text-purple-500" />
@@ -1676,7 +1615,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   <button
                     onClick={handleCreateZipBackup}
                     disabled={isCreatingBackup}
-                    className="w-full flex items-center justify-between p-2.5 rounded-xl bg-purple-50 hover:bg-purple-100 dark:bg-purple-950/50 dark:hover:bg-purple-900/60 text-purple-700 dark:text-purple-300 text-xs font-semibold transition-colors cursor-pointer disabled:opacity-50"
+                    className="flex items-center justify-between p-3 rounded-xl bg-purple-50 hover:bg-purple-100 dark:bg-purple-950/50 dark:hover:bg-purple-900/60 text-purple-700 dark:text-purple-300 text-xs font-semibold transition-colors cursor-pointer disabled:opacity-50"
                   >
                     <span className="flex items-center gap-2">
                       <Archive className="w-4 h-4 text-purple-500" />
@@ -2963,79 +2902,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 </div>
               </div>
 
-              {/* Dedicated Admin Console Background & Atmosphere */}
-              <div className="p-5 rounded-2xl bg-white/80 dark:bg-slate-900/80 border border-slate-200 dark:border-white/10 shadow-xs space-y-4">
-                <div>
-                  <h3 className="font-bold text-sm text-slate-900 dark:text-slate-100 flex items-center gap-2">
-                    <ShieldAlert className="w-4 h-4 text-amber-500" />
-                    <span>پوسته و پس‌زمینه اختصاصی صفحه مدیریت</span>
-                  </h3>
-                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                    برای تمایز کامل صفحه مدیریت از صفحه عمومی کاربران، یکی از پوسته‌های اختصاصی کنسول سرور را انتخاب نمایید:
-                  </p>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-                  {[
-                    {
-                      id: 'blueprint',
-                      name: 'شبکه سرور (پیش‌فرض)',
-                      desc: 'شبکه فنی مهندسی با هاله‌های آبی و بنفش سرور',
-                      icon: LayoutDashboard
-                    },
-                    {
-                      id: 'cyber-dark',
-                      name: 'اتاق فرماندهی تیره',
-                      desc: 'کنسول مدیریت تیره با ماتریس نقاط درخشان',
-                      icon: Server
-                    },
-                    {
-                      id: 'mesh-indigo',
-                      name: 'گرادیانت فیوژن',
-                      desc: 'ترکیب مدرن سرمه‌ای، بنفش و نورهای ملایم',
-                      icon: Sparkles
-                    },
-                    {
-                      id: 'terminal',
-                      name: 'ترمینال مانیتورینگ',
-                      desc: 'سبک مانیتورینگ سرور با نور زمردی ترمینال',
-                      icon: Activity
-                    }
-                  ].map((bgItem) => {
-                    const Icon = bgItem.icon;
-                    const isSelected = adminBgStyle === bgItem.id;
-                    return (
-                      <button
-                        key={bgItem.id}
-                        type="button"
-                        onClick={() => handleAdminBgStyleChange(bgItem.id as AdminBgStyle)}
-                        className={`p-4 rounded-2xl border text-right transition-all cursor-pointer flex flex-col justify-between gap-3 relative ${
-                          isSelected
-                            ? 'border-indigo-600 bg-indigo-50/50 dark:bg-indigo-950/40 ring-2 ring-indigo-500/30 shadow-md'
-                            : 'border-slate-200 dark:border-white/10 hover:border-slate-300 dark:hover:border-white/20 bg-white dark:bg-slate-900/50'
-                        }`}
-                      >
-                        <div className="flex items-center justify-between">
-                          <div className={`w-8 h-8 rounded-xl flex items-center justify-center ${isSelected ? 'bg-indigo-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300'}`}>
-                            <Icon className="w-4 h-4" />
-                          </div>
-                          {isSelected && (
-                            <span className="inline-flex items-center gap-1 text-[10px] font-bold text-indigo-600 dark:text-indigo-400 bg-indigo-100 dark:bg-indigo-900/60 px-2 py-0.5 rounded-full">
-                              <Check className="w-3 h-3" />
-                              فعال
-                            </span>
-                          )}
-                        </div>
-                        <div>
-                          <div className="text-xs font-bold text-slate-900 dark:text-slate-100">{bgItem.name}</div>
-                          <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-1 leading-relaxed">{bgItem.desc}</div>
-                        </div>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
               {/* Public Background Picture / Wallpaper Management */}
               <div className="p-5 rounded-2xl bg-white/80 dark:bg-slate-900/80 border border-slate-200 dark:border-white/10 shadow-xs space-y-4">
                 <div className="flex items-center justify-between">
@@ -3348,21 +3214,42 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
                   <div>
                     <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                      تعداد ستون‌ها (دکمه‌های داشبورد)
+                      تعداد ستون‌ها (نمای جدولی و کارتی)
                     </label>
                     <select
                       value={settings.gridColumns || 4}
                       onChange={(e) => setSettings({ ...settings, gridColumns: Number(e.target.value) as any })}
-                      className="w-full px-3 py-2 rounded-xl text-xs bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-white/10 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-indigo-500 focus:outline-none transition-all cursor-pointer"
+                      className="w-full px-3 py-2 rounded-xl text-xs bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-white/10 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-indigo-500 focus:outline-none transition-all cursor-pointer font-bold"
                     >
-                      <option value={2}>۲ ستون</option>
+                      <option value={2}>۲ ستون (بزرگ و عریض)</option>
                       <option value={3}>۳ ستون</option>
-                      <option value={4}>۴ ستون (پیش‌فرض)</option>
+                      <option value={4}>۴ ستون (استاندارد)</option>
                       <option value={5}>۵ ستون</option>
                       <option value={6}>۶ ستون</option>
                       <option value={7}>۷ ستون</option>
                       <option value={8}>۸ ستون (فوق فشرده)</option>
                     </select>
+
+                    {/* Live Column Mockup Indicator */}
+                    <div className="mt-2 p-2 rounded-lg bg-slate-100 dark:bg-slate-950 border border-slate-200/80 dark:border-white/5">
+                      <div className="flex items-center justify-between text-[10px] text-slate-500 dark:text-slate-400 mb-1.5 font-medium">
+                        <span>پیش‌نمایش ردیف:</span>
+                        <span className="font-bold text-indigo-600 dark:text-indigo-400">{toPersianDigits(settings.gridColumns || 4)} ستون</span>
+                      </div>
+                      <div
+                        className="grid gap-1 w-full"
+                        style={{ gridTemplateColumns: `repeat(${settings.gridColumns || 4}, minmax(0, 1fr))` }}
+                      >
+                        {Array.from({ length: settings.gridColumns || 4 }).map((_, i) => (
+                          <div
+                            key={i}
+                            className="h-3.5 rounded bg-indigo-500/20 border border-indigo-500/30 text-[8px] flex items-center justify-center font-bold text-indigo-600 dark:text-indigo-300"
+                          >
+                            {toPersianDigits(i + 1)}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
                   </div>
                 </div>
 
@@ -3386,46 +3273,145 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     />
                     <span>نمایش تاریخ در هدر</span>
                   </label>
+                </div>
+              </div>
 
-                  <label className="flex items-center gap-2 text-xs font-medium text-slate-700 dark:text-slate-300 cursor-pointer">
+              {/* Splash Screen / IOOC Animation Settings */}
+              <div className="p-5 sm:p-6 rounded-2xl bg-white/80 dark:bg-slate-900/80 border border-slate-200 dark:border-white/10 shadow-xs space-y-5">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 dark:border-white/5 pb-4">
+                  <div>
+                    <h3 className="font-bold text-sm text-slate-900 dark:text-slate-100 flex items-center gap-2">
+                      <Sparkles className="w-4 h-4 text-cyan-500" />
+                      <span>انیمیشن ابتدایی هنگام باز شدن پورتال (اسپلش اسکرین IOOC)</span>
+                    </h3>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                      امکان فعال یا غیرفعال کردن انیمیشن ورودی، انتخاب از بین ۵ انیمیشن اختصاصی، تنظیم مدت‌زمان اجرا و تست لحظه‌ای.
+                    </p>
+                  </div>
+
+                  {/* Master Toggle */}
+                  <label className="inline-flex items-center gap-2.5 px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 cursor-pointer transition-all hover:bg-slate-200/70 dark:hover:bg-slate-700/80 shrink-0">
                     <input
                       type="checkbox"
-                      checked={settings.showTelemetryBar !== false}
-                      onChange={(e) => setSettings({ ...settings, showTelemetryBar: e.target.checked })}
-                      className="rounded text-indigo-600 focus:ring-indigo-500"
+                      checked={settings.splashEnabled !== false}
+                      onChange={(e) => setSettings({ ...settings, splashEnabled: e.target.checked })}
+                      className="sr-only peer"
                     />
-                    <span>نمایش نوار آمار سرور (پردازنده، حافظه، دیسک، آپتایم)</span>
+                    <div className="w-10 h-5 bg-slate-300 dark:bg-slate-600 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-cyan-500 relative" />
+                    <span className="text-xs font-bold text-slate-800 dark:text-slate-200">
+                      {settings.splashEnabled !== false ? 'انیمیشن ورودی: فعال' : 'انیمیشن ورودی: غیرفعال'}
+                    </span>
                   </label>
                 </div>
 
-                {settings.showTelemetryBar !== false && (
-                  <div className="pt-2 border-t border-slate-100 dark:border-slate-800 flex items-center gap-4">
-                    <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">
-                      موقعیت نوار وضعیت سرور:
-                    </label>
-                    <div className="flex items-center gap-3">
-                      <label className="flex items-center gap-1.5 text-xs text-slate-600 dark:text-slate-400 cursor-pointer">
+                {settings.splashEnabled !== false && (
+                  <div className="space-y-6 pt-1">
+                    {/* Duration Controls */}
+                    <div className="p-4 rounded-xl bg-slate-50/80 dark:bg-slate-950/60 border border-slate-200/80 dark:border-white/5 space-y-3">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                        <div>
+                          <label className="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
+                            <Clock className="w-3.5 h-3.5 text-blue-500" />
+                            <span>مدت‌زمان پخش انیمیشن:</span>
+                          </label>
+                          <span className="text-[11px] text-slate-500 dark:text-slate-400">
+                            مدت‌زمان اجرای جلوه نور و کلمه IOOC قبل از نمایش صفحه اصلی پورتال
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="px-3 py-1 rounded-lg bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20 text-xs font-mono font-bold">
+                            {toPersianDigits(((settings.splashDuration || 1500) / 1000).toFixed(1))} ثانیه
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => setIsPreviewingSplash(true)}
+                            className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-bold shadow-xs transition-all hover:scale-105 active:scale-95 cursor-pointer"
+                          >
+                            <Eye className="w-3.5 h-3.5" />
+                            <span>پیش‌نمایش زنده</span>
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Range slider */}
+                      <div className="flex items-center gap-3 pt-1">
+                        <span className="text-[11px] font-mono text-slate-400">0.5s</span>
                         <input
-                          type="radio"
-                          name="telemetryPosition"
-                          value="top"
-                          checked={settings.telemetryPosition !== 'bottom'}
-                          onChange={() => setSettings({ ...settings, telemetryPosition: 'top' })}
-                          className="text-indigo-600 focus:ring-indigo-500"
+                          type="range"
+                          min="500"
+                          max="3000"
+                          step="100"
+                          value={settings.splashDuration || 1500}
+                          onChange={(e) => setSettings({ ...settings, splashDuration: Number(e.target.value) })}
+                          className="w-full accent-cyan-500 cursor-pointer"
                         />
-                        <span>بالا (زیر هدر)</span>
-                      </label>
-                      <label className="flex items-center gap-1.5 text-xs text-slate-600 dark:text-slate-400 cursor-pointer">
-                        <input
-                          type="radio"
-                          name="telemetryPosition"
-                          value="bottom"
-                          checked={settings.telemetryPosition === 'bottom'}
-                          onChange={() => setSettings({ ...settings, telemetryPosition: 'bottom' })}
-                          className="text-indigo-600 focus:ring-indigo-500"
-                        />
-                        <span>پایین (بالای فوتر)</span>
-                      </label>
+                        <span className="text-[11px] font-mono text-slate-400">3.0s</span>
+                      </div>
+
+                      {/* Quick Presets */}
+                      <div className="flex flex-wrap gap-2 pt-1">
+                        {[
+                          { label: '۰.۵ ثانیه (فوق سریع)', val: 500 },
+                          { label: '۰.۸ ثانیه (سریع)', val: 800 },
+                          { label: '۱.۰ ثانیه (کوتاه)', val: 1000 },
+                          { label: '۱.۵ ثانیه (پیش‌فرض)', val: 1500 },
+                          { label: '۲.۰ ثانیه (سینمایی)', val: 2000 }
+                        ].map((preset) => {
+                          const isSel = (settings.splashDuration || 1500) === preset.val;
+                          return (
+                            <button
+                              key={preset.val}
+                              type="button"
+                              onClick={() => setSettings({ ...settings, splashDuration: preset.val })}
+                              className={`px-2.5 py-1 rounded-lg text-[11px] font-medium transition-all cursor-pointer ${
+                                isSel
+                                  ? 'bg-cyan-500 text-white font-bold shadow-xs'
+                                  : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-white/10 hover:border-cyan-400'
+                              }`}
+                            >
+                              {preset.label}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* Single Default Splash Presentation Card */}
+                    <div className="p-4 rounded-xl bg-slate-50/80 dark:bg-slate-950/60 border border-slate-200/80 dark:border-white/5 flex flex-col sm:flex-row items-center justify-between gap-4">
+                      <div className="flex items-center gap-3.5">
+                        {/* Mini Typography Preview Box */}
+                        <div className="w-32 py-2 px-3 rounded-xl flex flex-col items-center justify-center bg-gradient-to-b from-blue-50/90 via-sky-50 to-white dark:from-blue-950/50 dark:via-slate-900 dark:to-slate-950 border border-slate-200/80 dark:border-white/5 shadow-inner shrink-0">
+                          <span className="font-black text-xl tracking-[0.25em] text-transparent bg-clip-text bg-gradient-to-r from-sky-500 via-blue-600 to-indigo-600 dark:from-sky-200 dark:via-cyan-400 dark:to-blue-500 drop-shadow-xs">
+                            IOOC
+                          </span>
+                          <span className="text-[8px] tracking-[0.25em] uppercase font-bold text-slate-500 dark:text-slate-400 mt-0.5">
+                            Shiraz Office
+                          </span>
+                        </div>
+
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <h4 className="text-xs font-black text-slate-900 dark:text-slate-100">
+                              انیمیشن پیش‌فرض ورودی (IOOC - Shiraz Office)
+                            </h4>
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-cyan-400/20 text-cyan-700 dark:text-cyan-300 border border-cyan-400/30">
+                              پیش‌فرض فعال
+                            </span>
+                          </div>
+                          <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1 leading-relaxed">
+                            پرتو نوری کریستالی زنده با رینگ‌های هندسی متقارن و عبارت رسمی Shiraz Office در زیر آن
+                          </p>
+                        </div>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => setIsPreviewingSplash(true)}
+                        className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold bg-cyan-600 hover:bg-cyan-500 text-white shadow-sm transition-all hover:scale-105 active:scale-95 cursor-pointer shrink-0"
+                      >
+                        <Eye className="w-3.5 h-3.5" />
+                        <span>مشاهده پیش‌نمایش</span>
+                      </button>
                     </div>
                   </div>
                 )}
@@ -4057,99 +4043,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     <Trash2 className="w-4 h-4" />
                     <span>پاک‌سازی داده‌ها و ریست دیتابیس</span>
                   </button>
-                </div>
-              </div>
-
-              {/* Persistent Storage & Update Safety Guide */}
-              <div className="p-5 rounded-2xl bg-white/80 dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800 shadow-xs space-y-4">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                  <div className="flex items-center gap-2.5">
-                    <div className="w-9 h-9 rounded-xl bg-blue-500/10 dark:bg-blue-500/20 text-blue-600 dark:text-blue-400 flex items-center justify-center shrink-0">
-                      <HardDrive className="w-5 h-5 text-blue-600 dark:text-blue-400" />
-                    </div>
-                    <div>
-                      <h3 className="font-bold text-sm text-slate-900 dark:text-slate-100 flex items-center gap-2">
-                        <span>پیکربندی مسیر ذخیره‌سازی دائمی داده‌ها (Persistent Storage)</span>
-                        {systemInfo?.isExternalDataDir ? (
-                          <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-950/70 dark:text-emerald-300 font-bold border border-emerald-300 dark:border-emerald-800">
-                            ✓ ایمن در برابر آپدیت
-                          </span>
-                        ) : (
-                          <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 dark:bg-amber-950/70 dark:text-amber-300 font-bold border border-amber-300 dark:border-amber-800">
-                            پوشه پیش‌فرض داخلی
-                          </span>
-                        )}
-                      </h3>
-                      <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                        با ذخیره داده‌ها در مسیری خارج از برنامه (مانند <code className="font-mono text-blue-600 dark:text-blue-400">/opt/homelab-data</code>)، با حذف، جایگزینی یا به‌روزرسانی کدهای پروژه، هیچ اطلاعاتی پاک نمی‌شود.
-                      </p>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-950/80 border border-slate-200 dark:border-slate-800 space-y-2 text-xs">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                    <span className="font-semibold text-slate-700 dark:text-slate-300">مسیر فعال فعلی:</span>
-                    <span className="font-mono text-xs text-slate-900 dark:text-slate-100 font-bold px-2 py-1 rounded bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800" dir="ltr">
-                      {systemInfo?.dataDir || './data'}
-                    </span>
-                  </div>
-
-                  <div className="text-slate-600 dark:text-slate-400 text-[11px] leading-relaxed pt-1">
-                    {systemInfo?.isExternalDataDir ? (
-                      <span className="text-emerald-600 dark:text-emerald-400 font-medium">
-                        ✓ عالی! داده‌های شما در مسیری مجزا و پایدار ذخیره شده‌اند. می‌توانید با خیال راحت برنامه‌ها یا فایل‌های پروژه را آپدیت کنید.
-                      </span>
-                    ) : (
-                      <span>
-                        💡 در حال حاضر داده‌ها داخل پوشه خود برنامه ذخیره می‌شوند. برای فعال‌سازی ذخیره‌سازی دائمی، دستورات زیر را روی سرور اجرا کنید:
-                      </span>
-                    )}
-                  </div>
-                </div>
-
-                <div className="space-y-2 text-xs">
-                  <span className="font-bold text-slate-700 dark:text-slate-300">دستور فعال‌سازی پوشه مستقل در لینوکس (انتقال خودکار انجام می‌شود):</span>
-                  <pre className="p-3 rounded-xl bg-slate-900 text-slate-100 font-mono text-[11px] overflow-x-auto select-all dir-ltr text-left leading-relaxed">
-{`# 1. ایجاد پوشه با دسترسی لازم
-sudo mkdir -p /opt/homelab-data && sudo chmod 777 /opt/homelab-data
-
-# 2. تنظیم متغیر در فایل .env یا فایل .datadir
-echo "DATA_DIR=/opt/homelab-data" >> .env
-# یا: echo "/opt/homelab-data" > .datadir
-
-# 3. راه‌اندازی مجدد برنامه (اطلاعات قبلی خودکار به مسیر جدید منتقل می‌شود)`}
-                  </pre>
-                </div>
-              </div>
-
-              {/* Docker & Reverse Proxy Guides */}
-              <div className="p-5 rounded-2xl bg-white/80 dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800 shadow-xs space-y-4">
-                <div className="flex items-center gap-2 font-bold text-sm text-slate-900 dark:text-slate-100">
-                  <FileCode2 className="w-4 h-4 text-blue-500" />
-                  <span>راهنمای استقرار با داکر و پروکسی معکوس (Nginx)</span>
-                </div>
-
-                <div className="space-y-3 text-xs">
-                  <div>
-                    <span className="font-bold text-slate-700 dark:text-slate-300">اجرا با داکر (Docker Run):</span>
-                    <pre className="mt-1 p-3 rounded-xl bg-slate-900 text-slate-100 font-mono text-[11px] overflow-x-auto select-all dir-ltr text-left">
-                      docker run -d -p 3000:3000 -v /opt/linxdash/data:/app/data --name linxdash --restart unless-stopped linxdash:latest
-                    </pre>
-                  </div>
-
-                  <div>
-                    <span className="font-bold text-slate-700 dark:text-slate-300">پیکربندی پروکسی معکوس Nginx:</span>
-                    <pre className="mt-1 p-3 rounded-xl bg-slate-900 text-slate-100 font-mono text-[11px] overflow-x-auto select-all dir-ltr text-left">
-{`location / {
-    proxy_pass http://127.0.0.1:3000;
-    proxy_set_header Host $host;
-    proxy_set_header X-Real-IP $remote_addr;
-    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-    proxy_set_header X-Forwarded-Proto $scheme;
-}`}
-                    </pre>
-                  </div>
                 </div>
               </div>
             </div>
@@ -5550,6 +5443,15 @@ echo "DATA_DIR=/opt/homelab-data" >> .env
             </div>
           </div>
         </div>
+      )}
+
+      {/* Splash Screen Live Preview Modal */}
+      {isPreviewingSplash && (
+        <SplashIntro
+          minDurationMs={settings?.splashDuration || 1500}
+          previewMode={true}
+          onClosePreview={() => setIsPreviewingSplash(false)}
+        />
       )}
 
       {/* Footer */}

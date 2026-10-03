@@ -1,9 +1,15 @@
-export const APP_VERSION = '2.3.0';
+export const APP_VERSION = '2.3.2';
 
 export type UserRole = 'admin';
 export type DashboardTarget = 'public' | 'admin';
 export type ThemeMode = 'light' | 'dark';
 export type ClockType = 'analog' | 'digital' | 'both' | 'none';
+export type SplashStyle =
+  | 'cyber_shimmer'
+  | 'neon_pulse'
+  | 'matrix_tech'
+  | 'cosmic_glow'
+  | 'minimal_drift';
 
 export interface UploadedBackground {
   id: string;
@@ -127,6 +133,9 @@ export interface SystemSettings {
   customFooterText?: string;
   showTelemetryBar?: boolean;
   telemetryPosition?: 'top' | 'bottom';
+  splashEnabled?: boolean;
+  splashStyle?: SplashStyle;
+  splashDuration?: number; // duration in milliseconds
   configVersion: string;
 }
 

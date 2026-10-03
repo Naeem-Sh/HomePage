@@ -1,29 +1,35 @@
-# Directories
+# Build context exclusions for air-gapped production image
 node_modules
 dist
-dist/server.cjs
 build
 .git
 .github
+.vscode
+.idea
 
-# Persistent storage & backups (mounted via volumes)
+# Local data, uploads and backups (mounted via volumes at runtime)
 data
 uploads
 backups
+portal_shiraz_data
 *.tmp
 *.bak
 
-# Environment and secrets
+# Environment and secrets (pre-configured via docker-compose / .env)
 .env
 .env.local
 .env.*
 !.env.example
 
-# Logs and system
+# Logs and system caches
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 .DS_Store
 Thumbs.db
-.idea
-.vscode
+
+# Documentation & verification scripts
+*.png
+*.jpg
+*.jpeg
+docker_application_audit_report.txt

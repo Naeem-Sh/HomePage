@@ -11,16 +11,24 @@ services:
     environment:
       NODE_ENV: production
       PORT: 4500
+      TZ: Asia/Tehran
       JWT_SECRET: shiraz_portal_jwt_secret_token_2026
-      INITIAL_ADMIN_USER: admin
+      INITIAL_ADMIN_USERNAME: admin
       INITIAL_ADMIN_PASSWORD: "123"
       RESET_ADMIN_PASSWORD: "false"
       DATA_DIR: /app/data
     volumes:
-      # دایرکتوری داده‌های خارج از کانتینر برای ماندگاری اطلاعات، آپلودها و پشتیبان‌ها
-      - ./portal_shiraz_data:/app/data
+      # Standardized container persistent directory mapped to host ./data
+      - ./data:/app/data
+      # Synchronize host system time (read-only)
+      - /etc/localtime:/etc/localtime:ro
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
     healthcheck:
-      test: ["CMD-SHELL", "wget -q --spider http://127.0.0.1:4500/api/public/config || exit 1"]
+      test: ["CMD-SHELL", "wget -q --spider http://127.0.0.1:4500/healthz || exit 1"]
       interval: 30s
       timeout: 5s
       retries: 3

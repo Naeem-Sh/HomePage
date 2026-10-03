@@ -32,6 +32,7 @@ visits.json*
 .env
 .env.local
 .env.*
+!.env.example
 .datadir
 
 # Logs
